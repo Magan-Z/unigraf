@@ -1,0 +1,82 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UniGraf — три варианта экрана «Неделя»</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#E9ECF2;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;color:#16191D;padding:28px 24px}
+h1{font-size:22px;margin:0 0 4px}.lead{color:#5A6270;margin:0 0 22px;font-size:14px}
+.row3{display:flex;gap:28px;justify-content:center;align-items:flex-start}
+.col{width:372px}.cap{font-size:15px;font-weight:700;margin:0 0 3px}.cap2{font-size:12.5px;color:#5A6270;margin:0 0 12px;min-height:34px}
+.ph{width:372px;height:700px;border-radius:34px;border:7px solid #1b1f27;overflow:hidden;position:relative;background:#F4F6F9}
+.sc{height:100%;overflow-y:auto;position:relative}.sc::-webkit-scrollbar{width:0}
+.wk{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 8px;background:#F4F6F9}
+.wk b{font-size:22px;font-weight:800;letter-spacing:-.02em;display:block;line-height:1.1}
+.wk small{font-size:12px;color:#5A6270}
+.seg{display:flex;background:#E6EAF1;border-radius:12px;padding:3px;font-size:12px}
+.seg span{padding:7px 10px;border-radius:9px;color:#5A6270}
+.seg span.on{background:#CCDCF5;color:#0B2A5C;font-weight:500}
+.rail{position:sticky;top:0;z-index:5;background:#F4F6F9;padding:2px 12px 10px;display:flex;gap:6px;border-bottom:1px solid #E3E7EE}
+.chip{flex:1;border-radius:14px;padding:6px 0 7px;text-align:center;color:#5A6270}
+.chip i{font-style:normal;display:block;font-size:11px;letter-spacing:.02em}
+.chip b{display:block;font-size:18px;font-weight:800;color:#16191D;line-height:1.25}
+.chip .d{display:flex;justify-content:center;gap:3px;margin-top:3px;height:5px}
+.chip .d s{width:5px;height:5px;border-radius:50%;background:#B8C0CD;text-decoration:none}
+.chip.today{background:#0B397E}.chip.today i{color:#CCDCF5}.chip.today b{color:#fff}.chip.today .d s{background:#9DB8E8}
+.chip.past b{color:#98A1AF}
+.room,.rp{white-space:nowrap}
+.day h2{margin:0;font-size:27px;font-weight:800;letter-spacing:-.03em;line-height:1.05}
+.dh{position:sticky;top:62px;z-index:4;background:#F4F6F9;padding:22px 16px 8px;display:flex;align-items:baseline;justify-content:space-between;gap:8px}.dh .m{white-space:nowrap;font-size:12.5px}
+.dh .m{font-size:13px;color:#5A6270}.dh .m b{color:#16191D}.dh.today h2{color:#0B397E}
+.row{display:grid;grid-template-columns:50px 14px 1fr auto;gap:0 8px;padding:8px 16px;align-items:start}
+.t{font-size:14px;font-weight:700}.t small{display:block;font-size:11.5px;color:#7A8290;font-weight:400}
+.rl{position:relative;height:100%;min-height:46px}.rl:before{content:"";position:absolute;left:5px;top:4px;bottom:-12px;width:2px;background:#E1E5EC}
+.rl:after{content:"";position:absolute;width:12px;height:12px;border-radius:50%;background:var(--a);border:3px solid #F4F6F9;box-sizing:content-box;left:-3px;top:1px}
+.s{font-size:15.5px;font-weight:650;line-height:1.25}.s2{font-size:12.5px;color:#5A6270;margin-top:3px}
+.k{display:inline-block;font-size:11px;padding:1px 7px;border-radius:7px;background:var(--b);color:var(--a);font-weight:600;margin-right:6px}
+.room{font-weight:800;font-size:17px;border:2px solid var(--a);color:var(--a);border-radius:11px;padding:3px 9px;align-self:center;background:#fff}
+.none{padding:0 16px 14px;font-size:13px;color:#7A8290}
+.card{margin:12px 12px 0;background:#fff;border-radius:24px;border:1px solid #E3E7EE;position:relative}
+.ch{position:sticky;top:4px;z-index:4;display:flex;align-items:center;gap:12px;padding:14px 16px 10px;background:#fff;border-radius:24px 24px 0 0}
+.ch .n{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;font-size:21px;font-weight:800;background:#EEF1F6}
+.ch h3{margin:0;font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+.ch small{font-size:12.5px;color:#5A6270}.ch small b{color:#16191D}
+.card.today{border-color:#9DB8E8;box-shadow:0 0 0 3px #CCDCF566}
+.card.today .ch{background:#CCDCF5}.card.today .ch .n{background:#0B397E;color:#fff}
+.crow{display:grid;grid-template-columns:54px 1fr auto;gap:10px;padding:11px 16px;border-top:1px solid #EDF0F5;align-items:center}
+.crow .s{font-size:15px}.crow .t{color:var(--a)}
+.rp{font-weight:800;font-size:16px;background:var(--b);color:var(--a);border-radius:10px;padding:4px 10px}
+.ov{padding:6px 16px 14px}
+.ov .g{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.ov .c{display:flex;flex-direction:column;gap:5px;padding:6px 4px;border-radius:14px}
+.ov .c.today{background:#fff;box-shadow:inset 0 0 0 2px #0B397E}
+.ov .c u{text-decoration:none;font-size:11px;color:#5A6270;text-align:center}
+.ov .c b{font-size:15px;text-align:center;font-weight:800;margin-bottom:2px}
+.ov .c em{display:block;height:17px;border-radius:6px;background:var(--b)}
+.ov .c em.o{background:transparent;border:1.5px dashed #CBD2DD}
+.ov p{margin:8px 2px 0;font-size:12px;color:#5A6270}
+</style></head><body>
+<h1>UniGraf: экран «Неделя», три направления</h1>
+<p class="lead">Те же данные (неделя 12–17 октября, сегодня среда). Верхний ряд: начало экрана. Нижний ряд: прокрутка к среде, закреплённые заголовки на месте.</p>
+<div class="row3" id="r1"></div><div style="height:30px"></div><div class="row3" id="r2"></div>
+<script>
+var T={ol:['#7A8A12','#EAEEC8'],te:['#0E8F7E','#D3EFE9'],pk:['#C23B6B','#FADCE5'],co:['#D4572B','#FADFD5']};
+var P=['09:00','10:40','13:00','14:40','16:20'],E=['10:30','12:10','14:30','16:10','17:50'];
+var D=[
+{w:'Понедельник',s:'Пн',n:12,past:1,l:[[1,'Философия','Лекция','Кутаев А.Х.','3-01','ol',2],[2,'Философия','Практика','Кутаев А.Х.','2-07','ol'],[3,'Иностранный язык','Практика','Идразова Э.С-А.','2-16','te'],[4,'Технологии бизнес-коммуникаций','Практика','Юнаева С.М.','3-20','pk']]},
+{w:'Вторник',s:'Вт',n:13,past:1,l:[[2,'Физическая культура и спорт','Физ-ра','Навурбиев А.В.','3 корпус','pk'],[3,'Управление проектами','Лекция','Агаев М.В.','2-05','ol',1],[4,'Аккаунтинг и аудит','Лекция','Батаева П.С.','2-05','co',1]]},
+{w:'Среда',s:'Ср',n:14,today:1,l:[[3,'Технологическое предпринимательство','Лекция','Халиев М.С-У.','2-05','te',1],[4,'ЧТК и этика','Лекция','Ахмадова М.П.','2-07','te',2],[5,'Кураторский час','Куратор','Юнаева С.М.','2-05','co',1]]},
+{w:'Четверг',s:'Чт',n:15,l:[[1,'Управление проектами','Практика','Адымханов А.','2-21','ol'],[2,'Аккаунтинг и аудит','Практика','Батаева П.С.','2-16','co'],[3,'Системы управления контентом','Практика','Магомадов В.С.','2-23','pk']]},
+{w:'Пятница',s:'Пт',n:16,l:[]},
+{w:'Суббота',s:'Сб',n:17,l:[[1,'Технологическое предпринимательство','Практика','Халиев М.С-У.','2-23','te'],[2,'Графический дизайн','Практика','Магомедов И.А.','2-18','co']]}];
+function plur(n){return n+' '+(n==1?'пара':(n>1&&n<5?'пары':'пар'))}
+function meta(d){if(!d.l.length)return '<span class="m">пар нет</span>';return '<span class="m"><b>'+plur(d.l.length)+'</b> · '+P[d.l[0][0]-1]+'–'+E[d.l[d.l.length-1][0]-1]+'</span>'}
+function headBar(){return '<div class="wk"><div><b>Неделя</b><small>12–17 октября</small></div><div class="seg"><span class="on">1 неделя · сейчас</span><span>2 неделя</span></div></div>'}
+function strip(extra){return '<div class="rail"'+(extra||'')+'>'+D.map(function(d){var dots=[1,2,3,4,5].map(function(p){return '<s style="'+(d.l.some(function(x){return x[0]==p})?'':'opacity:.28')+'"></s>'}).join('');return '<div class="chip'+(d.today?' today':'')+(d.past?' past':'')+'"><i>'+d.s+'</i><b>'+d.n+'</b><div class="d">'+dots+'</div></div>'}).join('')+'</div>'}
+function rowsA(d){if(!d.l.length)return '<div class="none">Свободный день</div>';return d.l.map(function(x){var c=T[x[5]];return '<div class="row" style="--a:'+c[0]+';--b:'+c[1]+'"><div class="t">'+P[x[0]-1]+'<small>'+E[x[0]-1]+'</small></div><div class="rl"></div><div><div class="s">'+x[1]+'</div><div class="s2"><span class="k">'+x[2]+'</span>'+x[3]+(x[6]?' · +'+x[6]+' гр.':'')+'</div></div><div class="room">'+x[4]+'</div></div>'}).join('')}
+function days(){return D.map(function(d,i){return '<div class="day" id="d'+i+'"><div class="dh'+(d.today?' today':'')+'"><h2>'+d.w+'</h2>'+meta(d)+'</div>'+rowsA(d)+'</div>'}).join('')+'<div style="height:80px"></div>'}
+function A(){return headBar()+strip()+days()}
+function B(){return headBar()+'<div style="background:#EBEEF4;padding:2px 0 80px;min-height:100%">'+D.map(function(d,i){var rows=d.l.length?d.l.map(function(x){var c=T[x[5]];return '<div class="crow" style="--a:'+c[0]+';--b:'+c[1]+'"><div class="t">'+P[x[0]-1]+'<small>'+E[x[0]-1]+'</small></div><div><div class="s">'+x[1]+'</div><div class="s2"><span class="k">'+x[2]+'</span>'+x[3]+'</div></div><div class="rp">'+x[4]+'</div></div>'}).join(''):'<div class="none" style="border-top:1px solid #EDF0F5;padding-top:12px">Свободный день</div>';return '<div class="card'+(d.today?' today':'')+'" id="d'+i+'"><div class="ch"><div class="n">'+d.n+'</div><div><h3>'+d.w+(d.today?' · сегодня':'')+'</h3><small>'+(d.l.length?'<b>'+plur(d.l.length)+'</b> · '+P[d.l[0][0]-1]+'–'+E[d.l[d.l.length-1][0]-1]:'пар нет')+'</small></div></div>'+rows+'</div>'}).join('')+'</div>'}
+function C(){var grid='<div class="ov"><div class="g">'+D.map(function(d){var cells=[1,2,3,4,5].map(function(p){var x=d.l.filter(function(y){return y[0]==p})[0];return x?'<em style="background:'+T[x[5]][0]+'"></em>':'<em class="o"></em>'}).join('');return '<div class="c'+(d.today?' today':'')+'"><u>'+d.s+'</u><b>'+d.n+'</b>'+cells+'</div>'}).join('')+'</div><p>Неделя целиком: цветная ячейка — пара, пунктир — окно.</p></div>';return headBar()+grid+strip()+days()}
+var V=[['Вариант А · Лента','Закреплённая полоса дней, крупные названия, пары списком по линии времени',A],['Вариант Б · Карточки','Каждый день — белая карточка с шапкой; сегодня в голубой шапке с обводкой',B],['Вариант В · Обзор недели','Как А, плюс сверху цветная сетка недели: сразу видны загрузка дней и окна',C]];
+function mk(root,scroll){V.forEach(function(v,i){var c=document.createElement('div');c.className='col';c.innerHTML='<div class="cap">'+v[0]+'</div><div class="cap2">'+v[1]+'</div><div class="ph"><div class="sc">'+v[2]()+'</div></div>';root.appendChild(c);if(scroll){var sc=c.querySelector('.sc');var t=sc.querySelector('#d2');sc.scrollTop=t.offsetTop-(i==1?8:(i==2?60:62))+0}})}
+mk(document.getElementById('r1'),false);mk(document.getElementById('r2'),true);
+</script></body></html>
