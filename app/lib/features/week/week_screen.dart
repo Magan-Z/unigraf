@@ -442,7 +442,10 @@ class _LessonRow extends ConsumerWidget {
           if (!first) Divider(height: 1, thickness: 1, indent: Gap.lg, endIndent: Gap.lg, color: colors.divider),
           Padding(
             padding: const EdgeInsets.fromLTRB(Gap.lg, 12, Gap.lg, 12),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+            // Приглушается только содержимое (прошедшие дни), а не фон карточки: иначе карточка выглядит двухцветной
+            child: Opacity(
+              opacity: dimmed ? 0.6 : 1,
+              child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
               SizedBox(
                 width: 50,
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -493,6 +496,7 @@ class _LessonRow extends ConsumerWidget {
                 _RoomChip(room: room, tone: tone),
               ],
             ]),
+            ),
           ),
         ]),
       ),
@@ -507,7 +511,7 @@ class _LessonRow extends ConsumerWidget {
       onTap: () => showLessonActions(context, l),
       onLongPress: () => showLessonActions(context, l),
       onLongPressHint: 'Действия с парой',
-      child: ExcludeSemantics(child: Opacity(opacity: dimmed ? 0.55 : 1, child: row)),
+      child: ExcludeSemantics(child: row),
     );
   }
 }
