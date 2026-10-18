@@ -23,6 +23,7 @@ import 'package:unigraf/main.dart';
 import 'package:unigraf/theme/brand_colors.dart';
 import 'package:unigraf/theme/next_design.dart';
 import 'package:unigraf/update_check.dart';
+import 'package:unigraf/features/week/week_screen.dart' show weekRangeText;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
@@ -1133,5 +1134,42 @@ void main() {
       await _settle(tester);
       expect(tester.getRect(find.byType(Scaffold).first).width, 390);
     });
+  });
+
+  group('Неделя: дни отделены друг от друга', () {
+    testWidgets('у каждого дня своя полоса: число, сколько пар, «сегодня»; сверху даты недели', (tester) async {
+      await _start(tester, prefs: profile); // 07.10.2026, среда, 2 неделя
+      await tester.tap(find.text('Неделя').last);
+      await _settle(tester);
+
+      expect(find.text('5–10 октября'), findsOneWidget); // даты недели в верхней панели
+      expect(find.text('2 неделя · сейчас'), findsOneWidget);
+      expect(find.text('Понедельник'), findsOneWidget);
+      expect(find.text('5 октября · 4 пары'), findsOneWidget); // сколько пар в этот день
+      expect(find.text('сегодня'), findsOneWidget); // только у 7 октября
+      expect(find.text('Среда'), findsOneWidget);
+    });
+
+    testWidgets('дни без пар компактные: «пар нет», без точек и карточек', (tester) async {
+      await _start(tester, prefs: profile);
+      await tester.tap(find.text('Неделя').last);
+      await _settle(tester);
+      expect(find.textContaining('пар нет'), findsWidgets);
+    });
+
+    testWidgets('переключатель недели остаётся на месте и меняет даты', (tester) async {
+      await _start(tester, prefs: profile);
+      await tester.tap(find.text('Неделя').last);
+      await _settle(tester);
+      await tester.tap(find.text('1 неделя'));
+      await _settle(tester);
+      expect(find.text('12–17 октября'), findsOneWidget);
+      expect(find.text('сегодня'), findsNothing); // сегодня во 2 неделе
+    });
+  });
+
+  test('даты недели: в одном месяце и на стыке месяцев', () {
+    expect(weekRangeText(DateTime(2026, 10, 5), DateTime(2026, 10, 10)), '5–10 октября');
+    expect(weekRangeText(DateTime(2026, 9, 28), DateTime(2026, 10, 3)), '28 сент – 3 окт');
   });
 }
