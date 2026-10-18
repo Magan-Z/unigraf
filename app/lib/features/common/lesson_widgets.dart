@@ -52,7 +52,11 @@ class LessonTile extends ConsumerWidget {
     this.withGroups = const [],
     this.onLongPress,
     this.onTap,
+    this.dense = false,
   });
+
+  /// Компактная карточка (экран «Неделя»): предмет мельче и спокойнее, чтобы заголовок дня был главнее.
+  final bool dense;
 
   final String? timeLabel;
   final String subject;
@@ -94,7 +98,7 @@ class LessonTile extends ConsumerWidget {
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(
               child: Padding(
-                padding: EdgeInsets.fromLTRB(kNextDesign ? Gap.lg + 2 : Gap.lg, Gap.md, Gap.md, Gap.md),
+                padding: EdgeInsets.fromLTRB(kNextDesign ? Gap.lg + 2 : Gap.lg, dense ? 10 : Gap.md, Gap.md, dense ? 10 : Gap.md),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
                   if (timeLabel != null)
                     Padding(
@@ -103,7 +107,9 @@ class LessonTile extends ConsumerWidget {
                     ),
                   WordFitText(
                     styles.name(subject),
-                    style: theme.textTheme.titleMedium?.copyWith(color: textColor),
+                    style: dense
+                        ? theme.textTheme.titleMedium?.copyWith(color: textColor, fontSize: 15, fontWeight: FontWeight.w600)
+                        : theme.textTheme.titleMedium?.copyWith(color: textColor),
                     trailing: hasHomework
                         ? WidgetSpan(
                             alignment: PlaceholderAlignment.middle,
@@ -120,7 +126,7 @@ class LessonTile extends ConsumerWidget {
                     Expanded(
                       child: Wrap(spacing: Gap.sm, runSpacing: Gap.xs, crossAxisAlignment: WrapCrossAlignment.center, children: [
                         KindBadge(kind, tone: tone),
-                        if (teacher != null) Text(teacher!, style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                        if (teacher != null) Text(teacher!, style: (dense ? theme.textTheme.bodySmall : theme.textTheme.bodyMedium)?.copyWith(color: scheme.onSurfaceVariant)),
                         if (withGroups.isNotEmpty)
                           Row(mainAxisSize: MainAxisSize.min, children: [
                             Icon(Icons.groups_rounded, size: 16, color: scheme.onSurfaceVariant),

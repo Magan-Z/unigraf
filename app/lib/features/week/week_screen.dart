@@ -76,7 +76,8 @@ class _WeekScreenState extends ConsumerState<WeekScreen> {
         // Сколько точек-номеров пар рисовать в полосе дня: не меньше 5, больше — если есть поздние пары
         final pairSlots = math.max(5, days.fold<int>(0, (m, d) => math.max(m, d.lessons.fold<int>(0, (a, l) => math.max(a, l.pair)))));
         final textScale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.6);
-        final headerHeight = 64.0 * textScale;
+        final headerHeight = 72.0 * textScale;
+        final emptyHeaderHeight = 60.0 * textScale;
 
         return Column(
           children: [
@@ -96,7 +97,7 @@ class _WeekScreenState extends ConsumerState<WeekScreen> {
                       SliverPersistentHeader(
                         pinned: true,
                         delegate: _DayHeaderDelegate(
-                          height: headerHeight,
+                          height: entry.lessons.isEmpty ? emptyHeaderHeight : headerHeight,
                           day: entry.day,
                           isToday: entry.day == today,
                           isPast: isCurrentWeek && entry.day.isBefore(today),
@@ -121,6 +122,7 @@ class _WeekScreenState extends ConsumerState<WeekScreen> {
                                 child: Padding(
                                   padding: EdgeInsets.only(bottom: i == entry.lessons.length - 1 ? 0 : Gap.sm),
                                   child: LessonTile(
+                                    dense: true,
                                     timeLabel: '${moscowTimeText(l.startAt)}–${moscowTimeText(l.endAt)} · ${l.pair} пара',
                                     subject: l.subject,
                                     kind: l.kind,
@@ -243,9 +245,13 @@ class _DayHeaderDelegate extends SliverPersistentHeaderDelegate {
     final soft = isToday ? scheme.onPrimaryContainer.withValues(alpha: 0.78) : scheme.onSurfaceVariant;
 
     final empty = lessonCount == 0;
+    // Число пар выделено жирным: это главное, что хочется увидеть в полосе дня
     final subtitle = empty
-        ? '${dateText(day)} · ${holiday ? 'праздничный день' : 'пар нет'}'
-        : '${dateText(day)} · $lessonCount ${plural(lessonCount, 'пара', 'пары', 'пар')}';
+        ? TextSpan(text: '${dateText(day)} · ${holiday ? 'праздничный день' : 'пар нет'}')
+        : TextSpan(children: [
+            TextSpan(text: '${dateText(day)} · '),
+            TextSpan(text: '$lessonCount ${plural(lessonCount, 'пара', 'пары', 'пар')}', style: TextStyle(color: fg, fontWeight: FontWeight.w700)),
+          ]);
 
     return Semantics(
       header: true,
@@ -269,7 +275,8 @@ class _DayHeaderDelegate extends SliverPersistentHeaderDelegate {
                       child: Text(weekdayTitles[day.weekday],
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium?.copyWith(color: fg, fontWeight: FontWeight.w700)),
+                          // Название дня — главный заголовок блока: заметно крупнее и жирнее названий предметов в карточках
+                          style: theme.textTheme.titleLarge?.copyWith(color: fg, fontWeight: FontWeight.w800, letterSpacing: -0.2, height: 1.15)),
                     ),
                     if (isToday) ...[
                       const SizedBox(width: Gap.sm),
@@ -280,7 +287,7 @@ class _DayHeaderDelegate extends SliverPersistentHeaderDelegate {
                       ),
                     ],
                   ]),
-                  Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: soft)),
+                  Text.rich(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium?.copyWith(color: soft)),
                 ]),
               ),
               if (!empty) ...[
@@ -309,15 +316,15 @@ class _DateTile extends StatelessWidget {
     final bg = isToday ? scheme.primary : scheme.surface;
     final fg = isToday ? scheme.onPrimary : (isPast ? scheme.onSurfaceVariant : scheme.onSurface);
     return Container(
-      width: 44,
-      height: 44,
+      width: 48,
+      height: 48,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(Radii.sm),
         border: isToday ? null : Border.all(color: scheme.outlineVariant),
       ),
-      child: Text('${day.day}', style: theme.textTheme.titleLarge?.copyWith(color: fg, fontWeight: FontWeight.w800, height: 1)),
+      child: Text('${day.day}', style: theme.textTheme.titleLarge?.copyWith(color: fg, fontWeight: FontWeight.w800, fontSize: 22, height: 1)),
     );
   }
 }
