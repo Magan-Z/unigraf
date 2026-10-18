@@ -1145,7 +1145,8 @@ void main() {
       expect(find.text('5–10 октября'), findsOneWidget); // даты недели в верхней панели
       expect(find.text('2 неделя · сейчас'), findsOneWidget);
       expect(find.text('Понедельник'), findsOneWidget);
-      expect(find.text('5 октября · 4 пары'), findsOneWidget); // сколько пар в этот день
+      expect(find.text('4 пары · 09:00–16:10'), findsOneWidget); // сколько пар в этот день и во сколько
+      expect(find.text('5'), findsWidgets); // плитка с числом дня
       expect(find.text('сегодня'), findsOneWidget); // только у 7 октября
       expect(find.text('Среда'), findsOneWidget);
     });
