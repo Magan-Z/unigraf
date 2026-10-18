@@ -182,12 +182,16 @@ class FakeBackend {
   var _clock = 0;
   final validCodes = {'GOODCODE': 'ofo-1-bi-25'};
   final usedCodes = <String>{};
+  final codeNonces = <String, String>{}; // код → метка ввода, по которой повтор возвращает тот же токен
+  var failedCodeAttempts = 0; // неверные вводы кода (как счётчик на сервере); с 20-го ввод блокируется
+  bool loseNextRedeemResponse = false; // сервер обработал ввод, но ответ не дошёл (обрыв связи)
 
   /// Режим преподавателя: коды (имя и разрешённые группы), строки ДЗ преподавателей (по одной на группу).
   final teacherCodes = <String, ({String name, List<String> groups})>{
     'TEACHCODE': (name: 'Халиев М.С-У.', groups: ['ofo-1-bi-25', 'ofo-2-bi-25']),
   };
   final usedTeacherCodes = <String>{};
+  final teacherNonces = <String, String>{};
   final teacherRows = <String, Map<String, dynamic>>{}; // id строки → строка (с group_id, batch_id, author)
   var _batch = 0;
 
@@ -225,14 +229,35 @@ class FakeBackend {
             });
           case 'redeem_code':
             final code = (args['p_code'] as String).trim().toUpperCase();
-            if (!validCodes.containsKey(code)) return fail('bad_code');
-            if (!usedCodes.add(code)) return fail('code_used');
+            final nonce = args['p_nonce'] as String?;
+            if (usedCodes.contains(code) && nonce != null && codeNonces[code] == nonce) {
+              return ok({'group_id': validCodes[code], 'token': 'tok-$code'});
+            }
+            if (failedCodeAttempts >= 20) return fail('too_many_attempts');
+            if (!validCodes.containsKey(code)) {
+              failedCodeAttempts++;
+              return fail('bad_code');
+            }
+            if (!usedCodes.add(code)) {
+              failedCodeAttempts++;
+              return fail('code_used');
+            }
+            if (nonce != null) codeNonces[code] = nonce;
+            if (loseNextRedeemResponse) {
+              loseNextRedeemResponse = false;
+              throw http.ClientException('обрыв связи');
+            }
             return ok({'group_id': validCodes[code], 'token': 'tok-$code'});
           case 'redeem_teacher_code':
             final code = (args['p_code'] as String).trim().toUpperCase();
+            final nonce = args['p_nonce'] as String?;
             final t = teacherCodes[code];
+            if (usedTeacherCodes.contains(code) && nonce != null && teacherNonces[code] == nonce) {
+              return ok({'teacher': t!.name, 'groups': t.groups, 'token': 'tok-teacher-$code'});
+            }
             if (t == null) return fail('bad_code');
             if (!usedTeacherCodes.add(code)) return fail('code_used');
+            if (nonce != null) teacherNonces[code] = nonce;
             return ok({'teacher': t.name, 'groups': t.groups, 'token': 'tok-teacher-$code'});
           case 'put_teacher_homework':
             final code = (args['p_token'] as String).replaceFirst('tok-teacher-', '');

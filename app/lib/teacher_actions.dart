@@ -10,6 +10,7 @@ import 'data/repositories/group_shared_repository.dart';
 import 'domain/attachment.dart';
 import 'domain/group_shared.dart';
 import 'domain/models.dart';
+import 'redeem_nonce.dart';
 import 'domain/teacher_homework.dart';
 
 class TeacherActions {
@@ -24,7 +25,12 @@ class TeacherActions {
   /// Ввод кода преподавателя: сервер выдаёт токен, он сохраняется в телефоне.
   static Future<TeacherSession> redeem(ProviderContainer container, String code) async {
     final api = container.read(sharedApiProvider) ?? (throw const SharedApiException('server', 'сервер не настроен'));
-    final session = await api.redeemTeacher(code.trim());
+    final session = await redeemWithNonce(
+      prefs: container.read(sharedPreferencesProvider),
+      kind: 'teacher',
+      code: code,
+      call: (nonce) => api.redeemTeacher(code.trim(), nonce: nonce),
+    );
     await container.read(teacherSessionProvider.notifier).set(session);
     container.invalidate(teacherSentProvider);
     return session;

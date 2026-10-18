@@ -5,7 +5,7 @@
 -- Устройство: студенты только читают (функция get_group_data), староста пишет по секретному токену,
 -- прямого доступа к таблицам из приложения нет ни у кого. Коды старост выдаёт владелец:
 --   select public.owner_issue_code('ofo-1-bi-25');   -- вернёт код, который нужно отдать старосте
--- Отозвать старосту / выдать код заново:  update public.group_codes set token = null, used_at = null where code = 'КОД';
+-- Отозвать старосту / выдать код заново:  update public.group_codes set token = null, used_at = null, token_nonce = null where code = 'КОД';
 --                                          delete from public.group_codes where code = 'КОД';
 
 create table public.group_codes (
@@ -359,7 +359,7 @@ end $$;
 --   select public.owner_issue_teacher_code('Фамилия И.О.', array['ofo-1-bi-25', 'ofo-2-bi-25']);
 -- Список групп строит скрипт data/tools/teacher_codes_sql.py из расписания.
 -- Отозвать: delete from public.teacher_codes where code = 'КОД';  (токены уже введённых кодов тоже перестают работать)
--- Выдать заново: update public.teacher_codes set token = null, used_at = null where code = 'КОД';
+-- Выдать заново: update public.teacher_codes set token = null, used_at = null, token_nonce = null where code = 'КОД';
 -- Изменить список групп: update public.teacher_codes set groups = array[...] where teacher = 'Фамилия И.О.';
 -- ДЗ преподавателей: group_homework.author (имя) и batch_id (одна отправка нескольким группам); студенты читают их
 -- отдельным ключом teacher_homework в get_group_data (старые версии приложения его не видят).
@@ -682,3 +682,109 @@ select version, platform, count(distinct install) as users
  group by version, platform order by users desc;
 
 revoke all on public.usage_summary, public.usage_by_day, public.usage_by_version from anon, authenticated;
+
+-- ============================================================================
+-- Часть 8 (миграция redeem_atomic_nonce_ratelimit): надёжный и защищённый ввод кодов старосты и преподавателя.
+-- Три изменения в redeem_code и redeem_teacher_code:
+-- 1) Атомарность. Раньше код сначала читался, потом гасился отдельной командой: два одновременных ввода одного кода
+--    могли оба пройти и получить по токену. Теперь одна команда «update ... where token is null returning»:
+--    код получает ровно один ввод, остальные видят code_used.
+-- 2) Повтор без потери. Приложение присылает случайный p_nonce (32 символа 0-9a-f) и хранит его у себя, пока ввод не завершится.
+--    Сервер запоминает nonce рядом с токеном (столбец token_nonce). Если ответ потерялся (обрыв связи) и телефон повторил ввод того же
+--    кода с тем же nonce в течение суток, сервер возвращает ТОТ ЖЕ токен, а не code_used. Чужой, кто знает только код, nonce не знает.
+--    Старые версии приложения шлют только p_code: для них работает как раньше (без повтора).
+-- 3) Защита от подбора. Неверные вводы (bad_code, а также code_used — он выдаёт, что код существует) считаются в таблице
+--    code_attempts по минутам на весь проект: после 20 неверных за минуту ввод кодов отвечает too_many_attempts до начала следующей
+--    минуты (даже верный код). Повтор с nonce из п. 2 под блокировку не попадает. Число 20 — в функции code_locked ниже.
+--    Расчёт: кодов 16^10 ≈ 1,1·10^12, действующих ~320; при потолке 20 в минуту (28 800 в сутки) шанс угадать хоть один код
+--    за год — порядка 0,3 %. Оборотная сторона: тот, кто шлёт неверные коды непрерывно, может не пускать вводить коды всех
+--    остальных, пока продолжает (на показ расписания и работу уже введённых токенов это не влияет). Увидеть, что это происходит:
+--      select * from public.code_attempts order by window_start desc limit 20;
+--    Сбросить блокировку вручную:  delete from public.code_attempts;
+-- Ошибки функции возвращаются не через raise exception (он откатывает и счётчик неверных вводов), а обычным ответом с HTTP-кодом 400
+-- и телом {"message": "bad_code"} — приложение читает его так же, как раньше. Код ответа ставит set_config('response.status', ...).
+-- При отзыве/повторной выдаче кода сбрасывайте и nonce:
+--   update public.group_codes   set token = null, used_at = null, token_nonce = null where code = 'КОД';
+--   update public.teacher_codes set token = null, used_at = null, token_nonce = null where code = 'КОД';
+-- ============================================================================
+alter table public.group_codes   add column token_nonce text check (token_nonce ~ '^[0-9a-f]{32}$');
+alter table public.teacher_codes add column token_nonce text check (token_nonce ~ '^[0-9a-f]{32}$');
+
+create table public.code_attempts (
+  window_start timestamptz primary key,   -- начало минуты
+  fails        int not null default 0     -- сколько неверных вводов кода за эту минуту
+);
+alter table public.code_attempts enable row level security;
+revoke all on public.code_attempts from anon, authenticated;
+
+-- Заблокирован ли ввод кодов в эту минуту (потолок: 20 неверных вводов в минуту на весь проект)
+create function public.code_locked() returns boolean
+language sql stable security definer set search_path = '' as $$
+  select coalesce((select fails from public.code_attempts where window_start = date_trunc('minute', now())), 0) >= 20;
+$$;
+
+-- Отказ при вводе кода: считает неверный ввод (кроме отказа из-за блокировки) и отвечает ошибкой 400 с кодом в поле message
+create function public.code_reject(p_reason text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+begin
+  if p_reason <> 'too_many_attempts' then
+    insert into public.code_attempts (window_start, fails) values (date_trunc('minute', now()), 1)
+      on conflict (window_start) do update set fails = public.code_attempts.fails + 1;
+    -- старые счётчики не копим
+    if random() < 0.02 then delete from public.code_attempts where window_start < now() - interval '1 day'; end if;
+  end if;
+  perform set_config('response.status', '400', true);
+  return jsonb_build_object('message', p_reason);
+end $$;
+
+drop function public.redeem_code(text);
+create function public.redeem_code(p_code text, p_nonce text default null) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  r public.group_codes%rowtype;
+  c text := upper(trim(coalesce(p_code, '')));
+  n text := case when p_nonce ~ '^[0-9a-f]{32}$' then p_nonce end;
+  t text;
+begin
+  -- повтор того же ввода после потерянного ответа: тот же nonce, и не позже суток — отдаём тот же токен
+  if n is not null then
+    select * into r from public.group_codes
+     where code = c and token_nonce = n and token is not null and used_at > now() - interval '1 day';
+    if found then return jsonb_build_object('group_id', r.group_id, 'token', r.token); end if;
+  end if;
+  if public.code_locked() then return public.code_reject('too_many_attempts'); end if;
+  t := replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
+  update public.group_codes set token = t, used_at = now(), token_nonce = n
+   where code = c and token is null
+  returning * into r;
+  if found then return jsonb_build_object('group_id', r.group_id, 'token', t); end if;
+  if exists (select 1 from public.group_codes where code = c) then return public.code_reject('code_used'); end if;
+  return public.code_reject('bad_code');
+end $$;
+
+drop function public.redeem_teacher_code(text);
+create function public.redeem_teacher_code(p_code text, p_nonce text default null) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  r public.teacher_codes%rowtype;
+  c text := upper(trim(coalesce(p_code, '')));
+  n text := case when p_nonce ~ '^[0-9a-f]{32}$' then p_nonce end;
+  t text;
+begin
+  if n is not null then
+    select * into r from public.teacher_codes
+     where code = c and token_nonce = n and token is not null and used_at > now() - interval '1 day';
+    if found then return jsonb_build_object('teacher', r.teacher, 'groups', to_jsonb(r.groups), 'token', r.token); end if;
+  end if;
+  if public.code_locked() then return public.code_reject('too_many_attempts'); end if;
+  t := replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
+  update public.teacher_codes set token = t, used_at = now(), token_nonce = n
+   where code = c and token is null
+  returning * into r;
+  if found then return jsonb_build_object('teacher', r.teacher, 'groups', to_jsonb(r.groups), 'token', t); end if;
+  if exists (select 1 from public.teacher_codes where code = c) then return public.code_reject('code_used'); end if;
+  return public.code_reject('bad_code');
+end $$;
+
+revoke execute on function public.code_locked(), public.code_reject(text) from public, anon, authenticated;
+grant execute on function public.redeem_code(text, text), public.redeem_teacher_code(text, text) to anon, authenticated;

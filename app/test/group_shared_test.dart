@@ -6,12 +6,16 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:unigraf/data/local/database.dart';
 import 'package:unigraf/data/remote/shared_api.dart';
 import 'package:unigraf/data/repositories/group_shared_repository.dart';
 import 'package:unigraf/domain/group_shared.dart';
 import 'package:unigraf/domain/models.dart';
 import 'package:unigraf/domain/teacher_homework.dart';
+import 'package:unigraf/redeem_nonce.dart';
+
+import 'support/fakes.dart';
 
 /// Поддельный сервер: запоминает вызовы и отвечает заранее заданным.
 class FakeServer {
@@ -139,10 +143,31 @@ void main() {
       expect(server.calls['redeem_code']!.single['p_code'], 'ABCD123456');
     });
 
+    test('ввод кода: уходит случайная метка ввода (nonce), заданная метка передаётся как есть', () async {
+      server.responses['redeem_code'] = (_) => {'group_id': 'ofo-1-bi-25', 'token': 'секрет'};
+      await api.redeem('ABCD123456');
+      await api.redeem('ABCD123456', nonce: 'a' * 32);
+      final first = server.calls['redeem_code']![0]['p_nonce'] as String;
+      expect(first, matches(RegExp(r'^[0-9a-f]{32}$')));
+      expect(server.calls['redeem_code']![1]['p_nonce'], 'a' * 32);
+      expect(newRedeemNonce(), isNot(newRedeemNonce()));
+    });
+
+    test('отказ приходит обычным ответом с message (так сервер не откатывает счётчик неверных вводов)', () async {
+      // сервер отвечает HTTP 400 с телом {"message": ...}; на случай 200 с тем же телом отказ тоже распознаётся
+      for (final message in ['bad_code', 'code_used', 'too_many_attempts']) {
+        server.responses['redeem_code'] = (_) => {'message': message};
+        await expectLater(api.redeem('x'), throwsA(isA<SharedApiException>().having((e) => e.code, 'code', message)));
+      }
+      server.responses['redeem_code'] = (_) => {'message': 'странное'};
+      await expectLater(api.redeem('x'), throwsA(isA<SharedApiException>().having((e) => e.code, 'code', 'server')));
+    });
+
     test('ошибки сервера превращаются в понятные сообщения', () async {
       for (final (message, text) in [
         ('bad_code', 'Код не подошёл'),
         ('code_used', 'уже использован'),
+        ('too_many_attempts', 'Подождите минуту'),
         ('bad_token', 'отозван'),
         ('too_many', 'Слишком много'),
         ('download_limit', 'Попробуйте завтра'),
@@ -330,6 +355,7 @@ void main() {
       expect(session.groups, ['ofo-1-bi-25', 'ofo-2-bi-25']);
       expect(session.token, 'tok');
       expect(server.calls['redeem_teacher_code']!.single['p_code'], 'ABC');
+      expect(server.calls['redeem_teacher_code']!.single['p_nonce'], matches(RegExp(r'^[0-9a-f]{32}$')));
     });
 
     test('отправка: токен, группы с подгруппой и файлы уходят строкой; возвращается номер отправки', () async {
@@ -381,6 +407,7 @@ void main() {
         ('rate_limit', 'Слишком много отправок'),
         ('bad_token', 'Доступ отозван'),
         ('code_used', 'уже использован'),
+        ('too_many_attempts', 'Подождите минуту'),
         ('bad_code', 'Код не подошёл'),
       ]) {
         server.failWith = 400;
@@ -390,6 +417,78 @@ void main() {
           throwsA(isA<SharedApiException>().having((e) => e.code, 'code', message).having((e) => e.message, 'message', contains(text))),
         );
       }
+    });
+  });
+
+  group('Ввод кода без потерь (метка nonce)', () {
+    late FakeBackend backend;
+    late SharedApi api;
+    late SharedPreferences prefs;
+    setUp(() async {
+      backend = FakeBackend();
+      api = backend.api();
+      SharedPreferences.setMockInitialValues({});
+      prefs = await SharedPreferences.getInstance();
+    });
+
+    Future<EditorSession> enter(String code) =>
+        redeemWithNonce(prefs: prefs, kind: 'editor', code: code, call: (nonce) => api.redeem(code.trim(), nonce: nonce));
+
+    test('потерянный ответ: код погашен, но повтор того же кода возвращает тот же токен', () async {
+      backend.loseNextRedeemResponse = true;
+      await expectLater(enter('goodcode'), throwsA(isA<SharedApiException>().having((e) => e.code, 'code', 'network')));
+      expect(prefs.getString('redeemNonce.editor'), startsWith('GOODCODE|')); // метка осталась в телефоне
+      // повтор (в том числе после перезапуска приложения, регистр и пробелы не важны)
+      final session = await enter(' GOODCODE ');
+      expect(session.token, 'tok-GOODCODE');
+      expect(session.groupId, 'ofo-1-bi-25');
+      expect(prefs.getString('redeemNonce.editor'), isNull); // после успеха метка стирается
+    });
+
+    test('другой телефон с тем же кодом (другая метка) получает «уже использован»', () async {
+      await enter('GOODCODE');
+      await expectLater(
+        api.redeem('GOODCODE', nonce: 'b' * 32),
+        throwsA(isA<SharedApiException>().having((e) => e.code, 'code', 'code_used')),
+      );
+      // и без метки (старая версия приложения) повтор не проходит
+      await expectLater(api.redeem('GOODCODE'), throwsA(isA<SharedApiException>().having((e) => e.code, 'code', 'code_used')));
+    });
+
+    test('метка относится к конкретному коду: для другого кода берётся новая', () async {
+      backend.validCodes['OTHERCODE'] = 'ofo-2-bi-25';
+      backend.loseNextRedeemResponse = true;
+      await expectLater(enter('GOODCODE'), throwsA(isA<SharedApiException>()));
+      final first = prefs.getString('redeemNonce.editor')!;
+      final session = await enter('OTHERCODE');
+      expect(session.groupId, 'ofo-2-bi-25');
+      expect(first, startsWith('GOODCODE|'));
+      expect(backend.codeNonces['OTHERCODE'], isNot(first.split('|').last));
+    });
+
+    test('неверный код стирает метку, сеть — оставляет', () async {
+      await expectLater(enter('NOPE'), throwsA(isA<SharedApiException>().having((e) => e.code, 'code', 'bad_code')));
+      expect(prefs.getString('redeemNonce.editor'), isNull);
+    });
+
+    test('подбор: после 20 неверных вводов даже верный код не принимается, но повтор с меткой проходит', () async {
+      backend.loseNextRedeemResponse = true;
+      await expectLater(enter('GOODCODE'), throwsA(isA<SharedApiException>().having((e) => e.code, 'code', 'network')));
+      for (var i = 0; i < 20; i++) {
+        await expectLater(api.redeem('GUESS$i'), throwsA(isA<SharedApiException>().having((e) => e.code, 'code', 'bad_code')));
+      }
+      backend.validCodes['NEWCODE'] = 'ofo-2-bi-25';
+      await expectLater(api.redeem('NEWCODE'), throwsA(isA<SharedApiException>().having((e) => e.code, 'code', 'too_many_attempts')));
+      // тот, у кого ответ потерялся, не заблокирован: у него есть метка
+      expect((await enter('GOODCODE')).token, 'tok-GOODCODE');
+    });
+
+    test('преподаватель: повтор с той же меткой возвращает тот же токен', () async {
+      const nonce = 'c0ffee00c0ffee00c0ffee00c0ffee00';
+      final first = await api.redeemTeacher('teachcode', nonce: nonce);
+      final again = await api.redeemTeacher('TEACHCODE', nonce: nonce);
+      expect(again.token, first.token);
+      await expectLater(api.redeemTeacher('TEACHCODE', nonce: 'd' * 32), throwsA(isA<SharedApiException>().having((e) => e.code, 'code', 'code_used')));
     });
   });
 }

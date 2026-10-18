@@ -3,6 +3,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -20,6 +21,7 @@ class SharedApiException implements Exception {
   String get message => switch (code) {
         'bad_code' => 'Код не подошёл. Проверьте, что он введён без ошибок',
         'code_used' => 'Этот код уже использован. Попросите выдать новый',
+        'too_many_attempts' => 'Слишком много неверных вводов кода. Подождите минуту и повторите',
         'bad_token' => 'Доступ отозван. Введите код заново',
         'too_many' => 'Слишком много записей у группы. Удалите ненужные',
         'file_too_big' => 'Файл слишком большой для общего сервера (не больше 8 МБ)',
@@ -39,6 +41,12 @@ class SharedApiException implements Exception {
   String toString() => 'SharedApiException($code${details == null ? '' : ', $details'})';
 }
 
+/// Случайная метка ввода кода: 32 символа 0-9a-f (128 бит), как ждёт сервер.
+String newRedeemNonce([Random? random]) {
+  final r = random ?? Random.secure();
+  return List.generate(32, (_) => r.nextInt(16).toRadixString(16)).join();
+}
+
 class SharedApi {
   SharedApi(this.baseUrl, this.key, {http.Client? client}) : _client = client ?? http.Client();
 
@@ -49,6 +57,7 @@ class SharedApi {
   static const _timeout = Duration(seconds: 15);
   static const _fileTimeout = Duration(seconds: 120); // файлы большие, на слабой сети грузятся долго
   // Ввод кода: сервер гасит код сразу, а ответ с токеном мог бы не успеть вернуться. Поэтому ждём дольше обычного
+  // (а если всё же не успел, повтор с той же меткой nonce вернёт тот же токен)
   static const _redeemTimeout = Duration(seconds: 30);
 
   Future<dynamic> _rpc(String function, Map<String, dynamic> args, {Duration timeout = _timeout}) async {
@@ -79,9 +88,21 @@ class SharedApi {
     try {
       message = (jsonDecode(text) as Map<String, dynamic>)['message'] as String?;
     } catch (_) {}
-    const known = {'bad_code', 'code_used', 'bad_token', 'too_many', 'bad_group', 'file_too_big', 'quota', 'too_many_files', 'no_file', 'download_limit', 'forbidden_group', 'bad_groups', 'rate_limit', 'bad_batch'};
+    const known = {'bad_code', 'code_used', 'too_many_attempts', 'bad_token', 'too_many', 'bad_group', 'file_too_big', 'quota', 'too_many_files', 'no_file', 'download_limit', 'forbidden_group', 'bad_groups', 'rate_limit', 'bad_batch'};
     if (message != null && known.contains(message)) throw SharedApiException(message);
     throw SharedApiException('server', message ?? 'HTTP ${response.statusCode}');
+  }
+
+  /// Ответ на ввод кода. Сервер отказывает обычным ответом {"message": "bad_code"} (так ошибка не откатывает счётчик
+  /// неверных вводов); код ответа при этом 400, но на случай 200 отказ распознаём и по телу.
+  Map<String, dynamic> _asRedeemResult(dynamic value) {
+    final r = _asMap(value);
+    final message = r['message'];
+    if (r['token'] == null && message is String) {
+      const refusals = {'bad_code', 'code_used', 'too_many_attempts'};
+      throw SharedApiException(refusals.contains(message) ? message : 'server', refusals.contains(message) ? null : message);
+    }
+    return r;
   }
 
   /// Анонимный счётчик пользователей (раз в сутки): случайный номер установки, платформа, версия.
@@ -99,8 +120,9 @@ class SharedApi {
   }
 
   /// Ввод кода старосты. Возвращает группу и секретный токен для этого телефона.
-  Future<EditorSession> redeem(String code) async {
-    final r = _asMap(await _rpc('redeem_code', {'p_code': code}, timeout: _redeemTimeout));
+  /// [nonce] — случайная метка этого ввода (см. [newRedeemNonce]): если ответ потерялся, повтор с той же меткой вернёт тот же токен.
+  Future<EditorSession> redeem(String code, {String? nonce}) async {
+    final r = _asRedeemResult(await _rpc('redeem_code', {'p_code': code, 'p_nonce': nonce ?? newRedeemNonce()}, timeout: _redeemTimeout));
     return EditorSession(token: r['token'] as String, groupId: r['group_id'] as String);
   }
 
@@ -137,8 +159,8 @@ class SharedApi {
   // ---------- преподаватель ----------
 
   /// Ввод кода преподавателя: имя, группы и секретный токен для этого телефона.
-  Future<TeacherSession> redeemTeacher(String code) async {
-    final r = _asMap(await _rpc('redeem_teacher_code', {'p_code': code}, timeout: _redeemTimeout));
+  Future<TeacherSession> redeemTeacher(String code, {String? nonce}) async {
+    final r = _asRedeemResult(await _rpc('redeem_teacher_code', {'p_code': code, 'p_nonce': nonce ?? newRedeemNonce()}, timeout: _redeemTimeout));
     return TeacherSession.fromJson(r);
   }
 
