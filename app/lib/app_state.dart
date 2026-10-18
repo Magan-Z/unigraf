@@ -576,27 +576,46 @@ class TeacherSessionNotifier extends Notifier<TeacherSession?> {
 
 final teacherSessionProvider = NotifierProvider<TeacherSessionNotifier, TeacherSession?>(TeacherSessionNotifier.new);
 
+/// Сколько ждать сервер, если у преподавателя уже есть сохранённый список (в тестах подменяется).
+final teacherSentWaitProvider = Provider<Duration>((ref) => const Duration(seconds: 4));
+
 /// Что преподаватель уже отправил студентам (с сервера; без связи показывается последняя сохранённая копия).
+/// Если копия есть, а сервер отвечает медленно (больше [teacherSentWaitProvider]) или с ошибкой, сразу показываем копию:
+/// иначе на слабой сети вкладка до 15 секунд крутила бы кружок. Исключение — «Доступ отозван»: тогда копию не показываем.
 /// После изменения вызываем ref.invalidate(teacherSentProvider).
+/// Автоповтор Riverpod здесь выключен: по умолчанию он повторял бы запрос до 10 раз (около 40 секунд), и вместо
+/// ошибки («Доступ отозван», «Нет связи») человек всё это время видел бы крутящийся кружок. Повторить можно кнопкой.
 final teacherSentProvider = FutureProvider<List<TeacherHomeworkBatch>>((ref) async {
   final session = ref.watch(teacherSessionProvider);
   final api = ref.watch(sharedApiProvider);
   if (session == null || api == null) return const [];
   final prefs = ref.read(sharedPreferencesProvider);
+  final wait = ref.read(teacherSentWaitProvider);
+
+  List<TeacherHomeworkBatch>? cached;
   try {
-    final list = await api.getTeacherHomework(session.token);
+    final saved = jsonDecode(prefs.getString('teacherSentCache') ?? 'null');
+    if (saved is List) cached = [for (final b in saved) TeacherHomeworkBatch.fromJson(b as Map<String, dynamic>)];
+  } catch (_) {}
+
+  Future<List<TeacherHomeworkBatch>> saveAfter(Future<List<TeacherHomeworkBatch>> request) async {
+    final list = await request;
     await prefs.setString('teacherSentCache', jsonEncode([for (final b in list) b.toJson()]));
     return list;
+  }
+
+  final request = saveAfter(api.getTeacherHomework(session.token));
+  try {
+    return cached == null ? await request : await request.timeout(wait);
+  } on TimeoutException {
+    // Ответ ещё придёт и сам обновит сохранённую копию (для следующего открытия); ошибку позднего ответа гасим
+    unawaited(request.then<void>((_) {}, onError: (Object _) {}));
+    return cached!;
   } on SharedApiException catch (e) {
-    if (e.code == 'network') {
-      try {
-        final cached = jsonDecode(prefs.getString('teacherSentCache') ?? 'null');
-        if (cached is List) return [for (final b in cached) TeacherHomeworkBatch.fromJson(b as Map<String, dynamic>)];
-      } catch (_) {}
-    }
+    if (cached != null && e.code != 'bad_token') return cached;
     rethrow;
   }
-});
+}, retry: (retryCount, error) => null);
 
 // ---------- личные правки ----------
 

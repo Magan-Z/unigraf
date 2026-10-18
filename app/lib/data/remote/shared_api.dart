@@ -48,6 +48,8 @@ class SharedApi {
 
   static const _timeout = Duration(seconds: 15);
   static const _fileTimeout = Duration(seconds: 120); // файлы большие, на слабой сети грузятся долго
+  // Ввод кода: сервер гасит код сразу, а ответ с токеном мог бы не успеть вернуться. Поэтому ждём дольше обычного
+  static const _redeemTimeout = Duration(seconds: 30);
 
   Future<dynamic> _rpc(String function, Map<String, dynamic> args, {Duration timeout = _timeout}) async {
     final base = baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
@@ -98,7 +100,7 @@ class SharedApi {
 
   /// Ввод кода старосты. Возвращает группу и секретный токен для этого телефона.
   Future<EditorSession> redeem(String code) async {
-    final r = _asMap(await _rpc('redeem_code', {'p_code': code}));
+    final r = _asMap(await _rpc('redeem_code', {'p_code': code}, timeout: _redeemTimeout));
     return EditorSession(token: r['token'] as String, groupId: r['group_id'] as String);
   }
 
@@ -136,7 +138,7 @@ class SharedApi {
 
   /// Ввод кода преподавателя: имя, группы и секретный токен для этого телефона.
   Future<TeacherSession> redeemTeacher(String code) async {
-    final r = _asMap(await _rpc('redeem_teacher_code', {'p_code': code}));
+    final r = _asMap(await _rpc('redeem_teacher_code', {'p_code': code}, timeout: _redeemTimeout));
     return TeacherSession.fromJson(r);
   }
 

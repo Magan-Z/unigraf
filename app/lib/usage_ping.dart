@@ -41,8 +41,11 @@ Future<void> sendUsagePing({
   String? platform,
   String? version,
   Random? random,
+  Uri? location,
 }) async {
   if (api == null || _sending) return;
+  // Проверочный режим для разработчика: адрес вида .../app/?nocount не засоряет счётчик тестовыми отметками
+  if ((location ?? (kIsWeb ? Uri.base : null))?.queryParameters.containsKey('nocount') ?? false) return;
   final today = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
   if (prefs.getString(_lastDayKey) == today) return;
   _sending = true;

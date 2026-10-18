@@ -48,6 +48,16 @@ void main() {
     expect(jsonDecode(sent[0].body)['p_install'], jsonDecode(sent[1].body)['p_install']);
   });
 
+  test('адрес с ?nocount (проверки разработчика) ничего не отправляет и не запоминает', () async {
+    await sendUsagePing(prefs: prefs, api: api, now: DateTime(2026, 10, 16, 9), platform: 'web', location: Uri.parse('https://example.test/app/?nocount'));
+    expect(sent, isEmpty);
+    expect(prefs.getString('usage.last_day'), isNull);
+    expect(prefs.getString('usage.install_id'), isNull);
+    // обычный адрес по-прежнему считается
+    await sendUsagePing(prefs: prefs, api: api, now: DateTime(2026, 10, 16, 9), platform: 'web', location: Uri.parse('https://example.test/app/?dpr=2'));
+    expect(sent, hasLength(1));
+  });
+
   test('без сети молча ничего не делает, а при следующем открытии пробует снова', () async {
     fail = true;
     await sendUsagePing(prefs: prefs, api: api, now: DateTime(2026, 10, 16, 9), platform: 'android');
