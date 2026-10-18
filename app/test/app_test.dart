@@ -569,6 +569,34 @@ void main() {
       expect(backend.calls.where((c) => c == 'get_group_file'), hasLength(1));
     });
 
+    testWidgets('ДЗ удалили на сервере (например, через 3 недели после срока): скачанный файл стирается из телефона', (tester) async {
+      final store = FakeAttachmentStore();
+      addTearDown(() => store.dir.deleteSync(recursive: true));
+      final backend = FakeBackend(hash: groupHash());
+      backend.files['f1'] = (name: 'Лекция.pdf', bytes: [1, 2, 3]);
+      backend.homework['h1'] = backend.hw(files: [
+        {'id': 'f1', 'name': 'Лекция.pdf', 'size': 3},
+      ]);
+      await _start(tester, prefs: profile, sharedApi: backend.api(), extraOverrides: [attachmentStoreProvider.overrideWithValue(store)]);
+
+      await tester.tap(find.text('ДЗ').last);
+      await _settle(tester);
+      await tester.tap(find.textContaining('Староста'));
+      await _settle(tester);
+      await tester.tap(find.text('Лекция.pdf'));
+      await _settle(tester);
+      expect(store.opened, ['Лекция.pdf']);
+      expect(store.dir.listSync(), hasLength(1)); // файл лежит в телефоне
+
+      // сервер убрал ДЗ (помечено удалённым позже, чем телефон последний раз обновлялся)
+      backend.homework['h1'] = {...backend.homework['h1']!, 'deleted': true, 'updated_at': '2026-10-09T13:00:00+00:00'};
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed); // как при возвращении в приложение
+      await _settle(tester);
+
+      expect(store.dir.listSync(), isEmpty); // скачанный файл стёрт
+      expect(store.deleted, ['Лекция.pdf']);
+    });
+
     testWidgets('нет интернета при скачивании файла: понятное сообщение, файл можно скачать позже', (tester) async {
       final store = FakeAttachmentStore();
       addTearDown(() => store.dir.deleteSync(recursive: true));

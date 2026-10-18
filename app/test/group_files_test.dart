@@ -47,6 +47,19 @@ void main() {
       expect(GroupHomeworkRow.fromJson(json).files, isEmpty);
     });
 
+    test('номера всех файлов ДЗ группы: и старосты, и преподавателей', () {
+      final state = GroupSharedState.empty.replaceWith({
+        'server_time': 't',
+        'overrides': [],
+        'homework': [FakeBackend().hw(files: [{'id': 'f1', 'name': 'a.pdf', 'size': 5}])],
+        'teacher_homework': [
+          {...FakeBackend().hw(files: [{'id': 'f2', 'name': 'b.pdf', 'size': 6}]), 'id': 't1', 'author': 'Иванов А.Б.'},
+        ],
+      });
+      expect(state.fileIds, {'f1', 'f2'});
+      expect(GroupSharedState.empty.fileIds, isEmpty);
+    });
+
     test('файлы переживают кэш телефона', () {
       final state = GroupSharedState.empty.replaceWith({
         'server_time': 't',
@@ -134,6 +147,34 @@ void main() {
       expect(service.cached('f1'), isNull);
       await service.download('ofo-1-bi-25', ref);
       expect(backend.calls.where((c) => c == 'get_group_file'), hasLength(2));
+    });
+
+    test('ДЗ исчезло с сервера: его скачанные файлы стираются из телефона, нужные остаются', () async {
+      backend.files['keep'] = (name: 'нужный.pdf', bytes: [1]);
+      backend.files['gone'] = (name: 'старый.pdf', bytes: [2]);
+      backend.files['gone2'] = (name: 'старый2.pdf', bytes: [3]);
+      final keep = await service.download('ofo-1-bi-25', const GroupFileRef(id: 'keep', name: 'нужный.pdf', size: 1));
+      final gone = await service.download('ofo-1-bi-25', const GroupFileRef(id: 'gone', name: 'старый.pdf', size: 1));
+      final gone2 = await service.download('ofo-1-bi-25', const GroupFileRef(id: 'gone2', name: 'старый2.pdf', size: 1));
+
+      final erased = await service.forgetExcept({'keep'});
+
+      expect(erased, 2);
+      expect(File(gone.path).existsSync(), isFalse);
+      expect(File(gone2.path).existsSync(), isFalse);
+      expect(File(keep.path).existsSync(), isTrue);
+      expect(service.cached('gone'), isNull);
+      expect(service.cached('keep'), isNotNull);
+      // второй проход ничего не находит
+      expect(await service.forgetExcept({'keep'}), 0);
+    });
+
+    test('чистка не падает, если файл уже стёрт вручную, и пустой кэш не трогает', () async {
+      expect(await service.forgetExcept({}), 0);
+      backend.files['f1'] = (name: 'a.txt', bytes: [1]);
+      final a = await service.download('ofo-1-bi-25', const GroupFileRef(id: 'f1', name: 'a.txt', size: 1));
+      File(a.path).deleteSync();
+      expect(await service.forgetExcept({}), 1);
     });
 
     test('файл, которого нет на сервере, даёт понятную ошибку', () async {

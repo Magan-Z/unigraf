@@ -520,6 +520,10 @@ Future<GroupNews> syncGroupShared(ProviderContainer c) async {
       }
     }
     c.invalidate(groupSharedProvider);
+    // Сервер убирает ДЗ через 3 недели после срока сдачи: скачанные файлы исчезнувших ДЗ стираем из памяти телефона
+    try {
+      await c.read(groupFilesProvider)?.forgetExcept(result.state.fileIds);
+    } catch (_) {}
     // Уведомление только о ДЗ, которое относится ко мне (общее или для моей подгруппы)
     final mine = settings.profile?.subgroup;
     bool visible(GroupHomeworkRow h) => mine == null || h.visibleTo(mine);

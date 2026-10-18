@@ -45,6 +45,27 @@ class GroupFiles {
     return prefs.setString(_key, jsonEncode(map));
   }
 
+  /// Стирает из памяти телефона скачанные файлы, которых больше нет ни в одном ДЗ группы (ДЗ удалили или оно устарело:
+  /// сервер убирает ДЗ через 3 недели после срока сдачи). [liveIds] — номера файлов, которые ещё нужны. Возвращает, сколько стёрто.
+  Future<int> forgetExcept(Set<String> liveIds) async {
+    final map = _map();
+    var erased = 0;
+    for (final id in [...map.keys]) {
+      if (liveIds.contains(id)) continue;
+      final j = map.remove(id);
+      erased++;
+      if (j is Map<String, dynamic> && j['path'] is String && j['name'] is String) {
+        try {
+          await store.delete(Attachment(name: j['name'] as String, path: j['path'] as String, sizeBytes: (j['size'] as num?)?.toInt()));
+        } catch (_) {
+          // не вышло стереть файл — запись всё равно убираем, телефон сам разберётся с памятью приложения
+        }
+      }
+    }
+    if (erased > 0) await prefs.setString(_key, jsonEncode(map));
+    return erased;
+  }
+
   /// Скачивает файл (если ещё не скачан) и возвращает его локальную копию.
   Future<Attachment> download(String groupId, GroupFileRef ref) async {
     final have = cached(ref.id);

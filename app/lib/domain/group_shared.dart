@@ -186,6 +186,11 @@ class GroupSharedState {
   /// Правки к уже устаревшему расписанию (после загрузки нового xlsx) — староста их стирает с сервера.
   List<GroupOverrideRow> staleOverrides(String currentHash) => [for (final o in overrides.values) if (o.baseHash != currentHash) o];
 
+  /// Номера всех файлов, прикреплённых к ДЗ группы (старосты и преподавателей).
+  Set<String> get fileIds => {
+        for (final h in [...homework.values, ...teacherHomework.values]) for (final f in h.files) f.id,
+      };
+
   List<GroupHomeworkRow> get homeworkList => homework.values.toList()..sort((a, b) => a.dueDate.compareTo(b.dueDate));
 
   List<GroupHomeworkRow> get teacherHomeworkList => teacherHomework.values.toList()..sort((a, b) => a.dueDate.compareTo(b.dueDate));

@@ -788,3 +788,32 @@ end $$;
 
 revoke execute on function public.code_locked(), public.code_reject(text) from public, anon, authenticated;
 grant execute on function public.redeem_code(text, text), public.redeem_teacher_code(text, text) to anon, authenticated;
+
+-- ============================================================================
+-- Часть 9 (миграция purge_expired_homework_cron): ДЗ старост и преподавателей удаляются через 21 день после срока сдачи.
+-- Раз в сутки (00:00 UTC = 03:00 по Москве) задание планировщика pg_cron «unigraf-purge-expired-homework» вызывает
+-- purge_expired_homework(): ДЗ, у которых срок сдачи старше 21 дня, помечаются удалёнными (телефоны узнают об этом при обновлении
+-- и стирают скачанные файлы), удалённые строки старше 30 дней стираются совсем, а файлы, не прикреплённые ни к одному живому ДЗ
+-- (и лежащие дольше часа), удаляются. Личные ДЗ студентов лежат только в их телефонах, сервер их не видит и не трогает.
+-- Изменить срок: число 21 в функции ниже. Посмотреть задание: select * from cron.job; последние запуски: select * from cron.job_run_details order by start_time desc limit 10;
+-- Отключить: select cron.unschedule('unigraf-purge-expired-homework');
+-- ============================================================================
+create function public.purge_expired_homework() returns int
+language plpgsql security definer set search_path = '' as $$
+declare n int;
+begin
+  update public.group_homework set deleted = true, updated_at = now()
+   where not deleted and due_date < (now() at time zone 'Europe/Moscow')::date - 21;
+  get diagnostics n = row_count;
+  perform public.purge_tombstones();
+  delete from public.group_files f
+   where f.created_at < now() - interval '1 hour'
+     and not exists (
+       select 1 from public.group_homework h, jsonb_array_elements(h.files) e
+        where not h.deleted and e->>'id' = f.id::text);
+  return n;
+end $$;
+revoke execute on function public.purge_expired_homework() from public, anon, authenticated;
+
+create extension if not exists pg_cron with schema pg_catalog;
+select cron.schedule('unigraf-purge-expired-homework', '0 0 * * *', $$select public.purge_expired_homework()$$);
