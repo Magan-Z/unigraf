@@ -56,3 +56,14 @@ def test_unrecognized_text_keeps_raw_as_subject() -> None:
     parsed = parse("Батаева П.С.")
     assert parsed.teacher == "Батаева П.С."
     assert parsed.subject == "Батаева П.С."  # предмет пустой → берём исходный текст
+
+
+def test_teacher_typo_fix_from_config() -> None:
+    """Опечатка в инициалах из config.json (subjectFixes) исправляется и в фамилии преподавателя."""
+    fixes = {"Батукаева А.С.": "Батукаева А.Р."}
+    parsed = parse("Правоведение Батукаева А.С. 3-08", fixes)
+    assert parsed.teacher == "Батукаева А.Р."
+    assert parsed.room == "3-08"
+    # другой преподаватель не затрагивается
+    assert parse("Правоведение Азиева П.З. 3-08", fixes).teacher == "Азиева П.З."
+
