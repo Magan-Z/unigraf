@@ -1169,6 +1169,26 @@ void main() {
     });
   });
 
+  group('Неделя в воскресенье', () {
+    testWidgets('воскресенье без своих пар: «Неделя» открывается на следующей неделе', (tester) async {
+      // 11.10.2026 — воскресенье конца 2 недели (5–10 октября); следующая — 1 неделя, 12–17 октября
+      await _start(tester, prefs: profile, now: DateTime.utc(2026, 10, 11, 10, 30));
+      await tester.tap(find.text('Неделя').last);
+      await _settle(tester);
+      expect(find.text('12–17 октября'), findsOneWidget);
+      expect(find.text('1 неделя · сейчас'), findsOneWidget);
+      expect(find.text('сегодня'), findsNothing); // сегодня воскресенье, его в списке дней нет
+    });
+
+    testWidgets('в субботу неделя ещё текущая', (tester) async {
+      await _start(tester, prefs: profile, now: DateTime.utc(2026, 10, 10, 10, 30));
+      await tester.tap(find.text('Неделя').last);
+      await _settle(tester);
+      expect(find.text('5–10 октября'), findsOneWidget);
+      expect(find.text('2 неделя · сейчас'), findsOneWidget);
+    });
+  });
+
   test('даты недели: в одном месяце и на стыке месяцев', () {
     expect(weekRangeText(DateTime(2026, 10, 5), DateTime(2026, 10, 10)), '5–10 октября');
     expect(weekRangeText(DateTime(2026, 9, 28), DateTime(2026, 10, 3)), '28 сент – 3 окт');

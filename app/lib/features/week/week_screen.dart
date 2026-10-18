@@ -62,11 +62,16 @@ class _WeekScreenState extends ConsumerState<WeekScreen> {
       error: (e, _) => Center(child: Text('Не удалось прочитать расписание:\n$e', textAlign: TextAlign.center)),
       data: (data) {
         if (data == null) return const SizedBox();
-        final currentWeek = data.weekFor(today);
+        // В воскресенье без своих пар неделя уже закончилась: «текущей» считаем следующую (как «Сегодня», которое
+        // в воскресенье переходит на понедельник). Если в воскресенье есть своя пара, остаёмся на этой неделе.
+        final sundayFree = today.weekday == DateTime.sunday &&
+            resolve(today, data.index, data.schedule, data.profile, overrides: data.overrides, forcedWeek: data.forcedWeek).isEmpty;
+        final anchor = sundayFree ? today.add(const Duration(days: 1)) : today;
+        final currentWeek = data.weekFor(anchor);
         final week = _week ?? currentWeek;
-        final monday = _mondayOf(week, today, data);
+        final monday = _mondayOf(week, anchor, data);
         final saturday = monday.add(const Duration(days: 5));
-        final thisMonday = today.subtract(Duration(days: today.weekday - 1));
+        final thisMonday = anchor.subtract(Duration(days: anchor.weekday - 1));
         final isCurrentWeek = monday == thisMonday;
 
         // Дни недели с парами; воскресенье показываем, только если там есть ваша своя пара
