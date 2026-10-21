@@ -185,6 +185,8 @@ class FakeBackend {
   final codeNonces = <String, String>{}; // код → метка ввода, по которой повтор возвращает тот же токен
   var failedCodeAttempts = 0; // неверные вводы кода (как счётчик на сервере); с 20-го ввод блокируется
   bool loseNextRedeemResponse = false; // сервер обработал ввод, но ответ не дошёл (обрыв связи)
+  Completer<void>? holdDeletes; // пока не завершён, ответы на удаление ДЗ и правок «зависают» (медленная сеть)
+  bool failDeletes = false; // удаление ДЗ и правок не проходит (сервер недоступен)
 
   /// Режим преподавателя: коды (имя и разрешённые группы), строки ДЗ преподавателей (по одной на группу).
   final teacherCodes = <String, ({String name, List<String> groups})>{
@@ -317,6 +319,8 @@ class FakeBackend {
             overrides[row['id'] as String] = row;
             return ok(row['id']);
           case 'delete_group_override':
+            await holdDeletes?.future;
+            if (failDeletes) return fail('server');
             overrides[args['p_id']]?['deleted'] = true;
             overrides[args['p_id']]?['updated_at'] = '2026-10-09T13:30:${(_clock++).toString().padLeft(2, '0')}+00:00';
             return http.Response('', 204);
@@ -325,6 +329,8 @@ class FakeBackend {
             homework[row['id'] as String] = row;
             return ok(row['id']);
           case 'delete_group_homework':
+            await holdDeletes?.future;
+            if (failDeletes) return fail('server');
             homework[args['p_id']]?['deleted'] = true;
             homework[args['p_id']]?['updated_at'] = '2026-10-09T13:30:${(_clock++).toString().padLeft(2, '0')}+00:00';
             return http.Response('', 204);

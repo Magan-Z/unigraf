@@ -7,6 +7,14 @@ import 'dart:convert';
 import 'attachment.dart';
 import 'models.dart';
 
+/// Заметка у пары, перенесённой старостой (показывается студентам).
+const movedNote = 'перенесено';
+
+const _moveMarkPrefix = 'moved:';
+
+/// Метка в отмене на старом месте: куда перенесена пара. По ней отмена и новая пара находят друг друга.
+String moveMark(DateTime date, int pair) => '$_moveMarkPrefix${dayText(date)}:$pair';
+
 /// Правка расписания, сделанная старостой.
 class GroupOverrideRow {
   const GroupOverrideRow({
@@ -190,6 +198,61 @@ class GroupSharedState {
   Set<String> get fileIds => {
         for (final h in [...homework.values, ...teacherHomework.values]) for (final f in h.files) f.id,
       };
+
+  /// Копии состояния с одной изменённой строкой: староста видит свои действия сразу, не дожидаясь ответа сервера.
+  GroupSharedState withoutHomework(String id) =>
+      GroupSharedState(overrides: overrides, homework: {...homework}..remove(id), teacherHomework: teacherHomework, since: since, syncedAt: syncedAt);
+
+  GroupSharedState withHomework(GroupHomeworkRow row) =>
+      GroupSharedState(overrides: overrides, homework: {...homework, row.id: row}, teacherHomework: teacherHomework, since: since, syncedAt: syncedAt);
+
+  GroupSharedState withoutOverrides(Iterable<String> ids) => GroupSharedState(
+        overrides: {...overrides}..removeWhere((id, _) => ids.contains(id)),
+        homework: homework,
+        teacherHomework: teacherHomework,
+        since: since,
+        syncedAt: syncedAt,
+      );
+
+  GroupSharedState withOverrides(Iterable<GroupOverrideRow> rows) => GroupSharedState(
+        overrides: {...overrides, for (final o in rows) o.id: o},
+        homework: homework,
+        teacherHomework: teacherHomework,
+        since: since,
+        syncedAt: syncedAt,
+      );
+
+  /// Правки, которые убираются вместе с [row]: перенос пары — это две правки (отмена на старом месте и своя пара на новом),
+  /// и «вернуть как было» должно убрать обе. Для переносов, сделанных до появления метки в отмене, пару ищем по времени.
+  List<GroupOverrideRow> withMovePartner(GroupOverrideRow row) {
+    final partners = <GroupOverrideRow>[];
+    if (row.type == OverrideType.add && row.note == movedNote) {
+      final mark = moveMark(row.date, row.pair);
+      final marked = [for (final o in overrides.values) if (o.type == OverrideType.cancel && o.note == mark) o];
+      if (marked.isNotEmpty) {
+        partners.addAll(marked);
+      } else {
+        // перенос сделан старой версией: отмена записана на сервере раньше добавления, обычно в те же секунды
+        final at = row.updatedAt;
+        final near = [
+          for (final o in overrides.values)
+            if (at != null &&
+                o.type == OverrideType.cancel &&
+                o.note == null &&
+                o.repeatWeekly == row.repeatWeekly &&
+                (!row.repeatWeekly || o.matchSubject == row.subject) &&
+                o.updatedAt != null &&
+                !o.updatedAt!.isAfter(at) &&
+                at.difference(o.updatedAt!) < const Duration(seconds: 60))
+              o,
+        ]..sort((a, b) => b.updatedAt!.compareTo(a.updatedAt!));
+        if (near.isNotEmpty) partners.add(near.first);
+      }
+    } else if (row.type == OverrideType.cancel && row.note != null && row.note!.startsWith(_moveMarkPrefix)) {
+      partners.addAll([for (final o in overrides.values) if (o.type == OverrideType.add && o.note == movedNote && moveMark(o.date, o.pair) == row.note) o]);
+    }
+    return [row, ...partners];
+  }
 
   List<GroupHomeworkRow> get homeworkList => homework.values.toList()..sort((a, b) => a.dueDate.compareTo(b.dueDate));
 

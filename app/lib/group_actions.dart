@@ -29,44 +29,89 @@ class GroupEditorActions {
 
   Future<void> _refresh() => syncGroupShared(container);
 
+  GroupSharedRepository get _repo => container.read(groupSharedRepositoryProvider)!;
+
+  /// Староста видит своё действие сразу: меняем кэш в телефоне, не дожидаясь ответа сервера (он уходит следом).
+  Future<void> _showNow(GroupSharedState Function(GroupSharedState) edit) async {
+    await _repo.change(_session.groupId, edit);
+    container.invalidate(groupSharedProvider);
+  }
+
   /// Сохраняет правки для всей группы. Для одной пары в один день правка только одна — старая заменяется
   /// (как и у личных правок); исключение — «свои» пары (add).
   Future<void> saveOverrides(List<Override> list) async {
     final token = _session.token;
     final hash = await _baseHash();
-    final repo = container.read(groupSharedRepositoryProvider)!;
-    final current = await repo.cached(_session.groupId);
+    final current = await _repo.cached(_session.groupId);
 
     for (final o in list) {
-      final toReplace = current.overrides.values.where((e) =>
-          e.date == o.date && e.pair == o.pair && (o.type == OverrideType.add ? e.type == OverrideType.add : e.type != OverrideType.add));
+      final toReplace = [
+        for (final e in current.overrides.values)
+          if (e.date == o.date && e.pair == o.pair && (o.type == OverrideType.add ? e.type == OverrideType.add : e.type != OverrideType.add)) e.id,
+      ];
       for (final old in toReplace) {
-        await _api.deleteOverride(token, old.id);
+        await _api.deleteOverride(token, old);
       }
-      await _api.putOverride(
-        token,
-        GroupOverrideRow(
-          id: newUuid(),
-          baseHash: hash,
-          date: o.date,
-          pair: o.pair,
-          type: o.type,
-          subject: o.subject,
-          room: o.room,
-          teacher: o.teacher,
-          note: o.note,
-          kind: o.kind,
-          repeatWeekly: o.repeatWeekly,
-          matchSubject: o.matchSubject,
-        ),
+      final row = GroupOverrideRow(
+        id: newUuid(),
+        baseHash: hash,
+        date: o.date,
+        pair: o.pair,
+        type: o.type,
+        subject: o.subject,
+        room: o.room,
+        teacher: o.teacher,
+        note: o.note,
+        kind: o.kind,
+        repeatWeekly: o.repeatWeekly,
+        matchSubject: o.matchSubject,
       );
+      await _api.putOverride(token, row);
+      await _showNow((s) => s.withoutOverrides(toReplace).withOverrides([row]));
     }
     await _refresh();
   }
 
-  Future<void> deleteOverride(String id) async {
-    await _api.deleteOverride(_session.token, id);
+  /// Убирает правки. Они исчезают у старосты сразу; если сервер не ответил, правки возвращаются и показывается ошибка.
+  Future<void> deleteOverrides(Iterable<String> ids) async {
+    final token = _session.token;
+    final order = ids.toSet().toList();
+    final before = await _repo.cached(_session.groupId);
+    final rows = {for (final id in order) if (before.overrides[id] != null) id: before.overrides[id]!};
+    await _showNow((s) => s.withoutOverrides(order));
+    final done = <String>{};
+    try {
+      for (final id in order) {
+        await _api.deleteOverride(token, id);
+        done.add(id);
+      }
+    } catch (_) {
+      await _showNow((s) => s.withOverrides([for (final e in rows.entries) if (!done.contains(e.key)) e.value]));
+      rethrow;
+    }
     await _refresh();
+  }
+
+  Future<void> deleteOverride(String id) => deleteOverrides([id]);
+
+  /// Убрать правку из списка. Перенос пары — это отмена на старом месте и своя пара на новом: убираются обе.
+  Future<void> removeEdit(String id) async {
+    final state = await _repo.cached(_session.groupId);
+    final row = state.overrides[id];
+    await deleteOverrides(row == null ? [id] : [for (final o in state.withMovePartner(row)) o.id]);
+  }
+
+  /// «Убрать правку старосты» у пары на экране: все правки группы, которые на неё действуют.
+  /// Если пару переносили, возвращается и отмена на старом месте.
+  Future<void> removeLessonEdits(ResolvedLesson lesson) async {
+    final state = await _repo.cached(_session.groupId);
+    final ids = <String>{};
+    for (final o in state.overrides.values) {
+      if (o.pair != lesson.pair || !o.toOverride().appliesOn(lesson.date)) continue;
+      final affectsLesson = o.type == OverrideType.add ? (o.subject ?? 'Занятие') == lesson.subject : o.matchSubject == null || o.matchSubject == lesson.subject;
+      if (affectsLesson) ids.addAll([for (final p in state.withMovePartner(o)) p.id]);
+    }
+    await deleteOverrides(ids);
   }
 
   /// Задать ДЗ для всей группы (или изменить существующее, если указан [id]).
@@ -88,16 +133,27 @@ class GroupEditorActions {
       refs = up.refs;
       local = up.local;
     }
-    await _api.putHomework(_session.token, GroupHomeworkRow(id: id ?? newUuid(), subject: subject, text: text, dueDate: due, kind: kind, subgroup: subgroup, files: refs));
+    final row = GroupHomeworkRow(id: id ?? newUuid(), subject: subject, text: text, dueDate: due, kind: kind, subgroup: subgroup, files: refs);
+    await _api.putHomework(_session.token, row);
     // ДЗ сохранено: локальные копии становятся «скачанными» файлами старосты
     for (final e in local.entries) {
       await filesService!.remember(e.key, e.value);
     }
+    await _showNow((s) => s.withHomework(row));
     await _refresh();
   }
 
+  /// Удалить ДЗ у всей группы. У старосты оно пропадает сразу; если сервер не ответил, ДЗ возвращается и показывается ошибка.
   Future<void> deleteHomework(String id) async {
-    await _api.deleteHomework(_session.token, id);
+    final token = _session.token;
+    final row = (await _repo.cached(_session.groupId)).homework[id];
+    await _showNow((s) => s.withoutHomework(id));
+    try {
+      await _api.deleteHomework(token, id);
+    } catch (_) {
+      if (row != null) await _showNow((s) => s.withHomework(row));
+      rethrow;
+    }
     await _refresh();
   }
 

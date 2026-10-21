@@ -8,14 +8,28 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app_state.dart';
 import '../../core/formatting.dart';
+import '../../domain/group_shared.dart';
 import '../../domain/models.dart';
 import '../../domain/overrides_text.dart';
+import '../../domain/pair_suggestions.dart';
 import '../../domain/search.dart' show teacherFullName;
 import '../../theme/tokens.dart';
 import '../../data/remote/shared_api.dart';
 import '../../group_actions.dart';
+import '../common/suggest_field.dart';
 import '../homework/add_homework_sheet.dart';
 import '../settings/subject_style_editor.dart';
+
+/// Подсказки для окон «Изменить пару» и «Своя пара»: из расписания группы и (если уже загружено) всего института.
+PairSuggestions _suggestionsFrom(ProviderContainer container) {
+  final data = container.read(myScheduleProvider).value;
+  if (data == null) return PairSuggestions.empty;
+  return PairSuggestions.build(
+    own: data.schedule,
+    others: container.read(allGroupsProvider).value ?? const [],
+    directory: data.index.teachers,
+  );
+}
 
 /// Нажатие на пару: что с ней можно сделать.
 Future<void> showLessonActions(BuildContext context, ResolvedLesson lesson) {
@@ -53,11 +67,7 @@ Future<void> showLessonActions(BuildContext context, ResolvedLesson lesson) {
   Future<void> removeGroupEdits() async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final state = await container.read(groupSharedProvider.future);
-      final actions = GroupEditorActions(container);
-      for (final o in state.overrides.values.where((o) => o.date == lesson.date && o.pair == lesson.pair && o.type != OverrideType.add)) {
-        await actions.deleteOverride(o.id);
-      }
+      await GroupEditorActions(container).removeLessonEdits(lesson);
       messenger.showSnackBar(const SnackBar(content: Text('Правка старосты убрана для всей группы')));
     } on SharedApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
@@ -115,7 +125,8 @@ Future<void> showLessonActions(BuildContext context, ResolvedLesson lesson) {
               subtitle: const Text('Другая аудитория, преподаватель или заметка'),
               onTap: () async {
                 close();
-                final changed = await showDialog<Override>(context: context, builder: (_) => _ReplaceDialog(lesson: lesson));
+                final suggestions = _suggestionsFrom(container);
+                final changed = await showDialog<Override>(context: context, builder: (_) => _ReplaceDialog(lesson: lesson, suggestions: suggestions));
                 if (changed != null) await save([changed]);
               },
             ),
@@ -198,7 +209,8 @@ Future<void> showLessonActions(BuildContext context, ResolvedLesson lesson) {
                 subtitle: const Text('Аудитория, преподаватель или заметка — у всех'),
                 onTap: () async {
                   close();
-                  final changed = await showDialog<Override>(context: context, builder: (_) => _ReplaceDialog(lesson: lesson));
+                  final suggestions = _suggestionsFrom(container);
+                final changed = await showDialog<Override>(context: context, builder: (_) => _ReplaceDialog(lesson: lesson, suggestions: suggestions));
                   if (changed != null) await saveForGroup([changed]);
                 },
               ),
@@ -216,6 +228,8 @@ Future<void> showLessonActions(BuildContext context, ResolvedLesson lesson) {
                       type: OverrideType.cancel,
                       repeatWeekly: move.repeat,
                       matchSubject: move.repeat ? lesson.subject : null,
+                      // метка связывает отмену с новым местом пары: «убрать правку» возвращает пару на прежнее место
+                      note: moveMark(move.date, move.pair),
                     ),
                     Override(
                       date: move.date,
@@ -225,7 +239,7 @@ Future<void> showLessonActions(BuildContext context, ResolvedLesson lesson) {
                       teacher: lesson.teacher,
                       room: lesson.room,
                       kind: lesson.kind,
-                      note: 'перенесено',
+                      note: movedNote,
                       repeatWeekly: move.repeat,
                     ),
                   ]);
@@ -288,8 +302,20 @@ class _DayEditsSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final all = ref.watch(overridesProvider).value ?? const [];
     final mine = [for (final o in all) if (o.appliesOn(day)) o];
+    // Правки старосты для всей группы: видны всем, убрать их может староста
+    final group = [for (final o in ref.watch(myScheduleProvider).value?.overrides ?? const <Override>[]) if (o.fromGroup && o.appliesOn(day)) o];
+    final isEditor = ref.watch(isGroupEditorProvider);
     final repo = ref.read(overridesRepositoryProvider);
     final theme = Theme.of(context);
+
+    Future<void> removeGroupEdit(Override o) async {
+      final messenger = ScaffoldMessenger.of(context);
+      try {
+        await GroupEditorActions.of(context).removeEdit(o.remoteId!);
+      } on SharedApiException catch (e) {
+        messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -297,13 +323,26 @@ class _DayEditsSheet extends ConsumerWidget {
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Мои правки · ${dayTitle(day)}', style: theme.textTheme.titleLarge),
           const SizedBox(height: Gap.sm),
-          if (mine.isEmpty)
+          if (mine.isEmpty && group.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: Gap.md),
               child: Text(
                 'На этот день правок нет. Изменить, перенести или отменить пару можно нажатием на неё.',
                 style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
+            ),
+          for (final o in group)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(describeOverride(o)),
+              subtitle: Text(o.repeatWeekly ? 'Правка старосты для всей группы · каждую неделю' : 'Правка старосты для всей группы'),
+              trailing: isEditor
+                  ? IconButton(
+                      tooltip: 'Убрать правку для всей группы',
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      onPressed: () => removeGroupEdit(o),
+                    )
+                  : null,
             ),
           for (final o in mine)
             ListTile(
@@ -324,7 +363,8 @@ class _DayEditsSheet extends ConsumerWidget {
             icon: const Icon(Icons.add_rounded),
             label: const Text('Добавить свою пару'),
             onPressed: () async {
-              final added = await showDialog<Override>(context: context, builder: (_) => _AddPairDialog(day: day));
+              final suggestions = _suggestionsFrom(ProviderScope.containerOf(context));
+              final added = await showDialog<Override>(context: context, builder: (_) => _AddPairDialog(day: day, suggestions: suggestions));
               if (added != null) {
                 await repo.save(added);
                 ref.invalidate(overridesProvider);
@@ -357,8 +397,9 @@ class _RepeatSwitch extends StatelessWidget {
 }
 
 class _ReplaceDialog extends StatefulWidget {
-  const _ReplaceDialog({required this.lesson});
+  const _ReplaceDialog({required this.lesson, this.suggestions = PairSuggestions.empty});
   final ResolvedLesson lesson;
+  final PairSuggestions suggestions;
 
   @override
   State<_ReplaceDialog> createState() => _ReplaceDialogState();
@@ -385,9 +426,9 @@ class _ReplaceDialogState extends State<_ReplaceDialog> {
       title: const Text('Изменить пару'),
       content: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: _room, decoration: const InputDecoration(labelText: 'Аудитория')),
+          SuggestField(controller: _room, label: 'Аудитория', options: widget.suggestions.rooms),
           const SizedBox(height: Gap.md),
-          TextField(controller: _teacher, decoration: const InputDecoration(labelText: 'Преподаватель')),
+          SuggestField(controller: _teacher, label: 'Преподаватель', options: widget.suggestions.teachers),
           const SizedBox(height: Gap.md),
           TextField(controller: _note, decoration: const InputDecoration(labelText: 'Заметка (например, «объявили в чате»)')),
           const SizedBox(height: Gap.sm),
@@ -487,8 +528,9 @@ class _MoveDialogState extends State<_MoveDialog> {
 }
 
 class _AddPairDialog extends StatefulWidget {
-  const _AddPairDialog({required this.day});
+  const _AddPairDialog({required this.day, this.suggestions = PairSuggestions.empty});
   final DateTime day;
+  final PairSuggestions suggestions;
 
   @override
   State<_AddPairDialog> createState() => _AddPairDialogState();
@@ -529,11 +571,11 @@ class _AddPairDialogState extends State<_AddPairDialog> {
               ChoiceChip(label: Text(k.title), selected: _kind == k, onSelected: (_) => setState(() => _kind = k)),
           ]),
           const SizedBox(height: Gap.md),
-          TextField(controller: _subject, onChanged: (_) => setState(() {}), decoration: const InputDecoration(labelText: 'Название')),
+          SuggestField(controller: _subject, label: 'Название', options: widget.suggestions.subjects, onChanged: () => setState(() {})),
           const SizedBox(height: Gap.md),
-          TextField(controller: _room, decoration: const InputDecoration(labelText: 'Аудитория')),
+          SuggestField(controller: _room, label: 'Аудитория', options: widget.suggestions.rooms),
           const SizedBox(height: Gap.md),
-          TextField(controller: _teacher, decoration: const InputDecoration(labelText: 'Преподаватель')),
+          SuggestField(controller: _teacher, label: 'Преподаватель', options: widget.suggestions.teachers),
           const SizedBox(height: Gap.md),
           TextField(controller: _note, decoration: const InputDecoration(labelText: 'Заметка')),
           const SizedBox(height: Gap.sm),

@@ -44,6 +44,9 @@ class GroupSharedRepository {
         GroupSharedCacheCompanion.insert(groupId: groupId, json: state.encode()),
       );
 
+  /// Меняет кэш прямо в телефоне, не обращаясь к серверу: действия старосты видны ему сразу, а с сервером сверяется следующее обновление.
+  Future<void> change(String groupId, GroupSharedState Function(GroupSharedState) edit) async => _save(groupId, edit(await cached(groupId)));
+
   /// Забирает с сервера изменения и сохраняет в кэш. Ошибки связи пробрасываются: вызывающий решает, показывать ли их.
   Future<GroupSyncResult> sync(String groupId, {DateTime? now}) async {
     final before = await cached(groupId);
