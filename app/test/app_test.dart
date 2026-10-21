@@ -867,6 +867,48 @@ void main() {
       expect(find.text('Консультация'), findsWidgets);
     });
 
+    testWidgets('«Добавить ДЗ» из вкладки «Староста» сразу для всей группы, из вкладки «Мои» — только себе', (tester) async {
+      final backend = FakeBackend(hash: groupHash());
+      await _start(tester, prefs: {...profile, ...editor}, sharedApi: backend.api());
+      await _settle(tester);
+      bool groupSwitch() => tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, 'Для всей группы')).value;
+
+      await tester.tap(find.text('ДЗ').last);
+      await _settle(tester);
+      await tester.tap(find.text('Добавить ДЗ'));
+      await _settle(tester);
+      expect(groupSwitch(), isFalse); // вкладка «Мои»
+      await tester.tapAt(const Offset(10, 10));
+      await _settle(tester);
+
+      await tester.tap(find.textContaining('Староста'));
+      await _settle(tester);
+      await tester.tap(find.text('Добавить ДЗ'));
+      await _settle(tester);
+      expect(groupSwitch(), isTrue); // вкладка «Староста»
+      await tester.tap(find.byType(DropdownMenu<String>));
+      await _settle(tester);
+      await tester.tap(find.text('Философия').last);
+      await _settle(tester);
+      await tester.enterText(find.byType(TextField).last, 'Прочитать конспект');
+      await tester.pump();
+      await tester.ensureVisible(find.widgetWithText(FilledButton, 'Добавить'));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Добавить'));
+      await _settle(tester);
+      expect(backend.homework.values.single['body'], 'Прочитать конспект'); // ушло группе без лишних нажатий
+    });
+
+    testWidgets('«Добавить ДЗ» с пары в меню по-прежнему сначала только себе', (tester) async {
+      await _start(tester, prefs: {...profile, ...editor}, sharedApi: FakeBackend(hash: groupHash()).api());
+      await _settle(tester);
+      await tester.longPress(find.text('ЧТК и этика').last);
+      await _settle(tester);
+      await tester.tap(find.text('Добавить ДЗ'));
+      await _settle(tester);
+      expect(tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, 'Для всей группы')).value, isFalse);
+    });
+
     testWidgets('староста прикрепляет файл к ДЗ группы: файл уходит на сервер, у старосты открывается без скачивания', (tester) async {
       final dir = Directory.systemTemp.createTempSync('hw_files');
       addTearDown(() => dir.deleteSync(recursive: true));

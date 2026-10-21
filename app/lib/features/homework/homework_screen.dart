@@ -59,7 +59,7 @@ class _HomeworkScreenState extends ConsumerState<HomeworkScreen> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => showAddHomework(context),
+        onPressed: () => showAddHomework(context, forGroup: tab == _Tab.group), // из вкладки «Староста» — сразу для всей группы
         icon: const Icon(Icons.add_rounded),
         label: const Text('Добавить ДЗ'),
       ),

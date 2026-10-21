@@ -19,7 +19,8 @@ import '../../domain/week_view.dart';
 import '../../theme/tokens.dart';
 
 /// Открывает окно добавления. [subject] — предмет, если уже известен (например, по долгому нажатию на пару).
-Future<void> showAddHomework(BuildContext context, {String? subject}) {
+/// [forGroup] — староста открыл окно из вкладки «Староста»: переключатель «Для всей группы» сразу включён.
+Future<void> showAddHomework(BuildContext context, {String? subject, bool forGroup = false}) {
   // Преподаватель: вместо личного ДЗ студента открывается отправка ДЗ студентам
   if (ProviderScope.containerOf(context).read(isTeacherModeProvider)) {
     return showTeacherHomeworkSheet(context, subject: subject);
@@ -28,13 +29,14 @@ Future<void> showAddHomework(BuildContext context, {String? subject}) {
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _AddHomeworkSheet(initialSubject: subject),
+    builder: (_) => _AddHomeworkSheet(initialSubject: subject, initialForGroup: forGroup),
   );
 }
 
 class _AddHomeworkSheet extends ConsumerStatefulWidget {
-  const _AddHomeworkSheet({this.initialSubject});
+  const _AddHomeworkSheet({this.initialSubject, this.initialForGroup = false});
   final String? initialSubject;
+  final bool initialForGroup;
 
   @override
   ConsumerState<_AddHomeworkSheet> createState() => _AddHomeworkSheetState();
@@ -56,6 +58,7 @@ class _AddHomeworkSheetState extends ConsumerState<_AddHomeworkSheet> {
   void initState() {
     super.initState();
     _subject = widget.initialSubject;
+    _forGroup = widget.initialForGroup && ref.read(isGroupEditorProvider); // переключатель есть только у старосты
     _store = ref.read(attachmentStoreProvider);
   }
 
