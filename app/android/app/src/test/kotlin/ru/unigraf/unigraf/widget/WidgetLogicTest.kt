@@ -39,6 +39,15 @@ class WidgetLogicTest {
     }
 
     @Test
+    fun assessmentKindsHaveLetters() {
+        val letters = listOf("attestation", "credit", "exam").map {
+            WidgetLogic.parse("""{"weekLabel":"1 неделя","days":[{"date":"2026-10-12","lessons":[${lesson("2026-10-12T09:00+03:00", "2026-10-12T10:30+03:00", 1, "ЧТК", "2-15", it)}]}]}""")
+                .allLessons.single().kindLetter
+        }
+        assertEquals(listOf("А", "З", "Э"), letters)
+    }
+
+    @Test
     fun parsesToneAndChangedFlag() {
         val withTone = WidgetLogic.parse(
             """{"weekLabel":"1 неделя","days":[{"date":"2026-10-12","lessons":[

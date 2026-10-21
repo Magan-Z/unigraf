@@ -638,7 +638,7 @@ void main() {
 
       await tester.tap(find.text('Мои правки').hitTestable());
       await _settle(tester);
-      await tester.tap(find.text('Добавить свою пару'));
+      await tester.tap(find.text('Добавить пару'));
       await _settle(tester);
 
       final subject = find.widgetWithText(TextField, 'Название');
@@ -678,11 +678,13 @@ void main() {
       await _settle(tester);
       await tester.tap(find.text('Мои правки').hitTestable());
       await _settle(tester);
-      await tester.tap(find.text('Добавить свою пару'));
+      await tester.tap(find.text('Добавить пару'));
       await _settle(tester);
       tester.view.physicalSize = const Size(360, 700); // телефон 360 dp
       tester.view.viewInsets = const FakeViewPadding(bottom: 300); // открытая клавиатура
       addTearDown(tester.view.resetViewInsets);
+      await tester.pump();
+      await tester.ensureVisible(find.widgetWithText(TextField, 'Преподаватель')); // окно прокручивается
       await tester.pump();
       await tester.tap(find.widgetWithText(TextField, 'Преподаватель'));
       await tester.pump();
@@ -694,6 +696,175 @@ void main() {
       await tester.tap(chip.first);
       await tester.pump();
       expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Преподаватель')).controller!.text, isNotEmpty);
+    });
+
+    Future<void> openAnnounce(WidgetTester tester) async {
+      await tester.longPress(find.text('ЧТК и этика').last);
+      await _settle(tester);
+      await tester.dragUntilVisible(find.text('Объявить аттестацию, зачёт или экзамен'), find.byType(Scrollable).last, const Offset(0, -200));
+      await tester.tap(find.text('Объявить аттестацию, зачёт или экзамен'));
+      await _settle(tester);
+    }
+
+    testWidgets('староста объявляет аттестацию: по умолчанию на следующее такое же занятие, пояснение про подгруппу', (tester) async {
+      final backend = FakeBackend(hash: groupHash());
+      await _start(tester, prefs: {...profile, ...editor}, sharedApi: backend.api());
+      await _settle(tester);
+      await openAnnounce(tester);
+
+      expect(find.text('Объявить для группы'), findsOneWidget);
+      expect(find.textContaining('Объявление увидит ваша подгруппа (БИ-25-1)'), findsOneWidget);
+      expect(find.textContaining('добавьте экзамен через «Добавить пару»'), findsOneWidget);
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Объявить')).onPressed, isNull); // вид не выбран
+
+      await tester.tap(find.text('Аттестация'));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Объявить'));
+      await _settle(tester);
+
+      final saved = backend.overrides.values.single;
+      expect((saved['type'], saved['kind'], saved['date'], saved['pair']), ('replace', 'attestation', '2026-10-21', 4));
+      expect((saved['match_subject'], saved['note'], saved['base_hash']), ('ЧТК и этика', 'Аттестация', groupHash()));
+      expect(find.text('Практика'), findsWidgets); // сегодняшняя пара не тронута
+      expect(find.text('Аттестация'), findsNothing);
+    });
+
+    testWidgets('аттестация на сегодняшнюю пару: яркая метка и заметка, убрать правку возвращает обычную пару', (tester) async {
+      final backend = FakeBackend(hash: groupHash());
+      await _start(tester, prefs: {...profile, ...editor}, sharedApi: backend.api());
+      await _settle(tester);
+      expect(find.text('Практика'), findsWidgets);
+
+      await openAnnounce(tester);
+      await tester.tap(find.text('это занятие'));
+      await tester.tap(find.text('Экзамен'));
+      await tester.enterText(find.widgetWithText(TextField, 'Заметка (необязательно)'), 'темы 1–5');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Объявить'));
+      await _settle(tester);
+
+      expect(backend.overrides.values.single['note'], 'Экзамен: темы 1–5');
+      expect(find.text('Экзамен'), findsOneWidget); // метка; название в заметке не повторяется
+      expect(find.text('темы 1–5'), findsOneWidget);
+      expect(find.text('Практика'), findsNothing);
+      expect(find.text('2-15'), findsWidgets); // аудитория и преподаватель остались
+
+      await tester.longPress(find.text('ЧТК и этика').last);
+      await _settle(tester);
+      await tester.dragUntilVisible(find.text('Убрать правку старосты'), find.byType(Scrollable).last, const Offset(0, -200));
+      await tester.tap(find.text('Убрать правку старосты'));
+      await _settle(tester);
+      expect(backend.overrides.values.where((o) => o['deleted'] != true), isEmpty);
+      expect(find.text('Экзамен'), findsNothing);
+      expect(find.text('Практика'), findsWidgets);
+    });
+
+    testWidgets('аттестация складывается с прежней правкой аудитории: обе остаются', (tester) async {
+      final backend = FakeBackend(hash: groupHash());
+      backend.overrides['r1'] = backend.override(id: 'r1', pair: 4, type: 'replace', room: '3-33'); // 7 октября, 4 пара
+      await _start(tester, prefs: {...profile, ...editor}, sharedApi: backend.api());
+      await _settle(tester);
+      expect(find.text('3-33'), findsWidgets);
+
+      await openAnnounce(tester);
+      await tester.tap(find.text('это занятие'));
+      await tester.tap(find.text('Зачёт'));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Объявить'));
+      await _settle(tester);
+
+      final live = backend.overrides.values.where((o) => o['deleted'] != true).toList();
+      expect(live, hasLength(1));
+      expect((live.single['room'], live.single['kind']), ('3-33', 'credit'));
+      expect(find.text('Зачёт'), findsOneWidget);
+      expect(find.text('3-33'), findsWidgets);
+
+      // и наоборот: потом поменяли аудиторию — тип остался
+      await tester.longPress(find.text('ЧТК и этика').last);
+      await _settle(tester);
+      await tester.dragUntilVisible(find.text('Изменить для группы'), find.byType(Scrollable).last, const Offset(0, -200));
+      await tester.tap(find.text('Изменить для группы'));
+      await _settle(tester);
+      await tester.enterText(find.widgetWithText(TextField, 'Аудитория'), '1-01');
+      await tester.tap(find.text('Сохранить'));
+      await _settle(tester);
+      final after = backend.overrides.values.where((o) => o['deleted'] != true).toList();
+      expect(after, hasLength(1));
+      expect((after.single['room'], after.single['kind']), ('1-01', 'credit'));
+    });
+
+    testWidgets('студент без старосты отмечает зачёт у себя: метка, «Мои правки» и ничего не уходит на сервер', (tester) async {
+      final backend = FakeBackend(hash: groupHash());
+      await _start(tester, prefs: profile, sharedApi: backend.api());
+      await _settle(tester);
+
+      await tester.longPress(find.text('ЧТК и этика').last);
+      await _settle(tester);
+      await tester.dragUntilVisible(find.text('Отметить аттестацию или экзамен'), find.byType(Scrollable).last, const Offset(0, -200));
+      await tester.tap(find.text('Отметить аттестацию или экзамен'));
+      await _settle(tester);
+      expect(find.text('Отметить у себя'), findsOneWidget);
+      expect(find.textContaining('Объявление увидит'), findsNothing); // пояснения про подгруппу только у старосты
+      await tester.tap(find.text('это занятие'));
+      await tester.tap(find.text('Зачёт'));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Отметить'));
+      await _settle(tester);
+
+      expect(find.text('Зачёт'), findsOneWidget);
+      expect(backend.overrides, isEmpty);
+
+      await tester.tap(find.text('Мои правки (1)'));
+      await _settle(tester);
+      expect(find.text('Зачёт: 4 пара (ЧТК и этика)'), findsOneWidget);
+    });
+
+    testWidgets('староста добавляет экзамен как пару для всей группы: уходит на сервер, повтор «каждую неделю» скрыт', (tester) async {
+      final backend = FakeBackend(hash: groupHash());
+      await _start(tester, prefs: {...profile, ...editor}, sharedApi: backend.api());
+      await _settle(tester);
+
+      await tester.tap(find.text('Мои правки').hitTestable());
+      await _settle(tester);
+      await tester.tap(find.text('Добавить пару'));
+      await _settle(tester);
+      expect(find.text('Каждую неделю'), findsOneWidget);
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Экзамен'));
+      await tester.pump();
+      expect(find.text('Каждую неделю'), findsNothing);
+      expect(find.text('Для всей группы'), findsOneWidget);
+      await tester.enterText(find.widgetWithText(TextField, 'Название'), 'Математика');
+      await tester.pump();
+      await tester.tap(find.text('Добавить'));
+      await _settle(tester);
+
+      final saved = backend.overrides.values.single;
+      expect((saved['type'], saved['kind'], saved['subject'], saved['repeat_weekly']), ('add', 'exam', 'Математика', false));
+      await tester.tapAt(const Offset(10, 10));
+      await _settle(tester);
+      expect(find.text('Экзамен'), findsOneWidget);
+      expect(find.text('Математика'), findsWidgets);
+    });
+
+    testWidgets('староста может добавить пару только себе: переключатель «Для всей группы» выключается', (tester) async {
+      final backend = FakeBackend(hash: groupHash());
+      await _start(tester, prefs: {...profile, ...editor}, sharedApi: backend.api());
+      await _settle(tester);
+      await tester.tap(find.text('Мои правки').hitTestable());
+      await _settle(tester);
+      await tester.tap(find.text('Добавить пару'));
+      await _settle(tester);
+      await tester.tap(find.byType(SwitchListTile).last);
+      await tester.pump();
+      expect(find.text('Только у вас на телефоне'), findsOneWidget);
+      await tester.enterText(find.widgetWithText(TextField, 'Название'), 'Консультация');
+      await tester.pump();
+      await tester.tap(find.text('Добавить'));
+      await _settle(tester);
+      expect(backend.overrides, isEmpty);
+      await tester.tapAt(const Offset(10, 10));
+      await _settle(tester);
+      expect(find.text('Консультация'), findsWidgets);
     });
 
     testWidgets('староста прикрепляет файл к ДЗ группы: файл уходит на сервер, у старосты открывается без скачивания', (tester) async {

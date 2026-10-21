@@ -491,10 +491,13 @@ final teacherHomeworkProvider = Provider<List<GroupHomeworkRow>>((ref) {
 
 /// Что нового пришло с сервера: ДЗ старосты и ДЗ преподавателей (для уведомлений).
 class GroupNews {
-  const GroupNews({this.homework = const [], this.teacherHomework = const []});
+  const GroupNews({this.homework = const [], this.teacherHomework = const [], this.assessments = const []});
   final List<GroupHomeworkRow> homework;
   final List<GroupHomeworkRow> teacherHomework;
-  bool get isEmpty => homework.isEmpty && teacherHomework.isEmpty;
+
+  /// Аттестации, зачёты и экзамены, которые объявил староста.
+  final List<GroupOverrideRow> assessments;
+  bool get isEmpty => homework.isEmpty && teacherHomework.isEmpty && assessments.isEmpty;
   static const none = GroupNews();
 }
 
@@ -530,6 +533,7 @@ Future<GroupNews> syncGroupShared(ProviderContainer c) async {
     return GroupNews(
       homework: [for (final h in result.newHomework) if (visible(h)) h],
       teacherHomework: [for (final h in result.newTeacherHomework) if (visible(h)) h],
+      assessments: result.newAssessments,
     );
   } on SharedApiException {
     return GroupNews.none;

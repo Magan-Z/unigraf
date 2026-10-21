@@ -18,8 +18,15 @@ class OverridesRepository {
 
   /// Сохраняет правку. Для одной пары в один день правка может быть только одна — старая заменяется.
   /// Исключение — «своя пара» (add): у одной пары может быть и обычное занятие, и своё.
+  /// Правка «заменить» складывается с прежней заменой той же пары (аудитория, преподаватель, заметка, тип не теряются).
   Future<void> save(Override override) async {
     final day = dayOnly(override.date);
+    if (override.type == OverrideType.replace) {
+      final olds = await (db.select(db.overrides)
+            ..where((t) => t.date.equals(day) & t.pair.equals(override.pair) & t.type.equals(OverrideType.replace.name) & t.repeatWeekly.equals(override.repeatWeekly)))
+          .get();
+      if (olds.isNotEmpty) override = override.mergedOver(_fromRow(olds.first));
+    }
     await (db.delete(db.overrides)
           ..where((t) => t.date.equals(day) & t.pair.equals(override.pair) & t.type.equals(override.type.name)))
         .go();

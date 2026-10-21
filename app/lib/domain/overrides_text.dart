@@ -1,5 +1,6 @@
 // Описание личных правок простыми словами — для списка «Мои правки на этот день».
 
+import 'assessments.dart';
 import 'models.dart';
 
 String describeOverride(Override o) {
@@ -13,16 +14,23 @@ String _describeBase(Override o) {
     case OverrideType.cancel:
       return o.matchSubject == null ? 'Отменена: $pair' : 'Отменена: $pair (${o.matchSubject})';
     case OverrideType.replace:
+      final kind = o.kind;
+      final note = kind == null ? o.note : visibleNote(kind, o.note);
       final changes = [
         if (o.subject != null) 'предмет: ${o.subject}',
         if (o.teacher != null) 'преподаватель: ${o.teacher}',
         if (o.room != null) 'аудитория: ${o.room}',
-        if (o.note != null) 'заметка: ${o.note}',
+        if (note != null) 'заметка: $note',
       ];
+      if (kind != null && kind.isAssessment) {
+        final subject = o.matchSubject == null ? '' : ' (${o.matchSubject})';
+        return '${kind.title}: $pair$subject${changes.isEmpty ? '' : ' — ${changes.join(', ')}'}';
+      }
       return 'Изменена: $pair${changes.isEmpty ? '' : ' — ${changes.join(', ')}'}';
     case OverrideType.add:
       final parts = [o.subject ?? 'Занятие', if (o.room != null) o.room!, if (o.teacher != null) o.teacher!];
-      return 'Своя пара: $pair — ${parts.join(', ')}';
+      final title = o.kind != null && o.kind!.isAssessment ? o.kind!.title : 'Своя пара';
+      return '$title: $pair — ${parts.join(', ')}';
   }
 }
 

@@ -66,6 +66,7 @@ void _applyOverrides(List<ResolvedLesson> result, List<Override> layer, DateTime
             teacher: o.teacher,
             room: o.room,
             note: o.note,
+            kind: o.kind, // аттестация, зачёт или экзамен вместо обычного занятия
             isPersonal: group ? null : true,
             isGroup: group ? true : null,
             groupChangedAt: group ? o.changedAt : null,

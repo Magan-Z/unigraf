@@ -5,11 +5,18 @@ enum LessonKind {
   lecture('Лекция', 'Л'),
   practice('Практика', 'П'),
   pe('Физ-ра', 'Ф'),
-  curator('Куратор', 'К');
+  curator('Куратор', 'К'),
+  // Объявляются старостой (или вами у себя): аттестация вместо лекции, зачёт, экзамен
+  attestation('Аттестация', 'А'),
+  credit('Зачёт', 'З'),
+  exam('Экзамен', 'Э');
 
   const LessonKind(this.title, this.letter);
   final String title;
   final String letter;
+
+  /// Аттестация, зачёт или экзамен.
+  bool get isAssessment => this == attestation || this == credit || this == exam;
 
   static LessonKind parse(String value) =>
       LessonKind.values.firstWhere((k) => k.name == value, orElse: () => LessonKind.practice);
@@ -296,6 +303,25 @@ class Override {
 
   /// Действует ли правка в этот день.
   bool appliesOn(DateTime day) => date == day || (repeatWeekly && !day.isBefore(date) && day.weekday == date.weekday);
+
+  /// Правка «заменить» поверх прежней правки той же пары: что здесь не задано, берётся из [old].
+  /// Так аудитория, преподаватель, заметка и тип (аттестация) не пропадают, когда пару правят второй раз.
+  Override mergedOver(Override old) => Override(
+        id: id,
+        date: date,
+        pair: pair,
+        type: type,
+        subject: subject ?? old.subject,
+        room: room ?? old.room,
+        teacher: teacher ?? old.teacher,
+        note: note ?? old.note,
+        kind: kind ?? old.kind,
+        repeatWeekly: repeatWeekly,
+        matchSubject: matchSubject ?? old.matchSubject,
+        fromGroup: fromGroup,
+        remoteId: remoteId,
+        changedAt: changedAt,
+      );
 }
 
 /// Занятие на конкретную дату — то, что показывается на экране.
@@ -334,7 +360,7 @@ class ResolvedLesson {
   final List<String> withGroups; // с какими группами объединена лекция (пусто — только эта группа)
   final DateTime? groupChangedAt; // когда староста изменил эту пару (для подписи «изменено старостой в 14:20»)
 
-  ResolvedLesson copyWith({String? subject, String? teacher, String? room, String? note, bool? isPersonal, bool? isGroup, DateTime? groupChangedAt}) =>
+  ResolvedLesson copyWith({String? subject, String? teacher, String? room, String? note, LessonKind? kind, bool? isPersonal, bool? isGroup, DateTime? groupChangedAt}) =>
       ResolvedLesson(
         date: date,
         pair: pair,
@@ -343,7 +369,7 @@ class ResolvedLesson {
         subject: subject ?? this.subject,
         teacher: teacher ?? this.teacher,
         room: room ?? this.room,
-        kind: kind,
+        kind: kind ?? this.kind,
         tags: tags,
         week: week,
         note: note ?? this.note,

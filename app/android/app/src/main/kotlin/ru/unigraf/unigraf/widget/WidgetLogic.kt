@@ -35,13 +35,16 @@ data class WidgetLesson(
     /** Цвета предмета из приложения (null — виджет красит сам). */
     val tone: WidgetToneSet? = null,
 ) {
-    /** Л / П / Ф / К — значок типа занятия. */
+    /** Л / П / Ф / К / А / З / Э — значок типа занятия (А — аттестация, З — зачёт, Э — экзамен). */
     val kindLetter: String
         get() = when (kind) {
             "lecture" -> "Л"
             "practice" -> "П"
             "pe" -> "Ф"
             "curator" -> "К"
+            "attestation" -> "А"
+            "credit" -> "З"
+            "exam" -> "Э"
             else -> ""
         }
 }

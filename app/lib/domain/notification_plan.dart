@@ -71,7 +71,7 @@ List<PlannedNotification> planNotifications({
           id: _id(day, l.pair, 0),
           payload: dayPayload(day),
           fireAt: fireAt,
-          title: l.room == null ? name(l.subject) : '${name(l.subject)} → ${l.room}',
+          title: [if (l.kind.isAssessment) '${l.kind.title}: ', name(l.subject), if (l.room != null) ' → ${l.room}'].join(),
           body: [if (l.teacher != null) l.teacher!, 'через $notifyBeforeMin мин'].join(' · '),
         ));
       }

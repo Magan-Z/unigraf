@@ -44,11 +44,17 @@ class GroupEditorActions {
     final hash = await _baseHash();
     final current = await _repo.cached(_session.groupId);
 
-    for (final o in list) {
-      final toReplace = [
+    for (var o in list) {
+      final same = [
         for (final e in current.overrides.values)
-          if (e.date == o.date && e.pair == o.pair && (o.type == OverrideType.add ? e.type == OverrideType.add : e.type != OverrideType.add)) e.id,
+          if (e.date == o.date && e.pair == o.pair && (o.type == OverrideType.add ? e.type == OverrideType.add : e.type != OverrideType.add)) e,
       ];
+      final toReplace = [for (final e in same) e.id];
+      // «Заменить» складывается с прежней заменой этой пары: аудитория, заметка, тип (аттестация) не теряются
+      if (o.type == OverrideType.replace) {
+        final before = same.where((e) => e.type == OverrideType.replace && e.repeatWeekly == o.repeatWeekly);
+        if (before.isNotEmpty) o = o.mergedOver(before.first.toOverride());
+      }
       for (final old in toReplace) {
         await _api.deleteOverride(token, old);
       }

@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app_state.dart';
 import '../../core/formatting.dart';
+import '../../domain/assessments.dart';
 import '../../domain/group_shared.dart';
 import '../../domain/models.dart';
 import '../../domain/overrides_text.dart';
@@ -17,6 +18,7 @@ import '../../theme/tokens.dart';
 import '../../data/remote/shared_api.dart';
 import '../../group_actions.dart';
 import '../common/suggest_field.dart';
+import 'announce_dialog.dart';
 import '../homework/add_homework_sheet.dart';
 import '../settings/subject_style_editor.dart';
 
@@ -28,6 +30,27 @@ PairSuggestions _suggestionsFrom(ProviderContainer container) {
     own: data.schedule,
     others: container.read(allGroupsProvider).value ?? const [],
     directory: data.index.teachers,
+  );
+}
+
+/// Окно «Объявить аттестацию / зачёт / экзамен» для нажатой пары. [forGroup] — староста объявляет всей своей подгруппе.
+Future<Override?> _askAnnounce(BuildContext context, ProviderContainer container, ResolvedLesson lesson, {required bool forGroup}) {
+  final data = container.read(myScheduleProvider).value;
+  final ahead = data == null
+      ? const <ResolvedLesson>[]
+      : sameLessonsAhead(from: lesson, index: data.index, schedule: data.schedule, profile: data.profile, overrides: data.overrides, forcedWeek: data.forcedWeek);
+  final options = [lesson, ...ahead];
+  // нажали на сегодняшнюю или прошедшую пару — объявление, скорее всего, про следующую; на будущую — про неё саму
+  final initial = lesson.date.isAfter(container.read(todayProvider)) || ahead.isEmpty ? 0 : 1;
+  String? hint;
+  if (forGroup && data != null && data.schedule.subgroups.isNotEmpty) {
+    final mine = [for (final s in data.schedule.subgroups) if (s.n == data.profile.subgroup) s.label];
+    hint = 'Объявление увидит ${mine.isEmpty ? 'ваша подгруппа' : 'ваша подгруппа (${mine.first})'}. '
+        'Чтобы объявить для всей группы, добавьте экзамен через «Добавить пару».';
+  }
+  return showDialog<Override>(
+    context: context,
+    builder: (_) => AnnounceDialog(lesson: lesson, options: options, initial: initial, forGroup: forGroup, groupHint: hint),
   );
 }
 
@@ -182,6 +205,16 @@ Future<void> showLessonActions(BuildContext context, ResolvedLesson lesson) {
                 ]);
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.quiz_rounded),
+              title: const Text('Отметить аттестацию или экзамен'),
+              subtitle: const Text('Аттестация, зачёт, экзамен — только у вас'),
+              onTap: () async {
+                close();
+                final announced = await _askAnnounce(context, container, lesson, forGroup: false);
+                if (announced != null) await save([announced]);
+              },
+            ),
             if (lesson.isPersonal || rulesForThisPair.isNotEmpty)
               ListTile(
                 leading: const Icon(Icons.undo_rounded),
@@ -212,6 +245,16 @@ Future<void> showLessonActions(BuildContext context, ResolvedLesson lesson) {
                   final suggestions = _suggestionsFrom(container);
                 final changed = await showDialog<Override>(context: context, builder: (_) => _ReplaceDialog(lesson: lesson, suggestions: suggestions));
                   if (changed != null) await saveForGroup([changed]);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.quiz_rounded),
+                title: const Text('Объявить аттестацию, зачёт или экзамен'),
+                subtitle: const Text('Для вашей подгруппы — у всех, кто в ней'),
+                onTap: () async {
+                  close();
+                  final announced = await _askAnnounce(context, container, lesson, forGroup: true);
+                  if (announced != null) await saveForGroup([announced]);
                 },
               ),
               ListTile(
@@ -361,13 +404,23 @@ class _DayEditsSheet extends ConsumerWidget {
           const SizedBox(height: Gap.md),
           FilledButton.tonalIcon(
             icon: const Icon(Icons.add_rounded),
-            label: const Text('Добавить свою пару'),
+            label: Text(isEditor ? 'Добавить пару' : 'Добавить свою пару'),
             onPressed: () async {
               final suggestions = _suggestionsFrom(ProviderScope.containerOf(context));
-              final added = await showDialog<Override>(context: context, builder: (_) => _AddPairDialog(day: day, suggestions: suggestions));
-              if (added != null) {
-                await repo.save(added);
+              final messenger = ScaffoldMessenger.of(context);
+              final actions = GroupEditorActions.of(context);
+              final added = await showDialog<_NewPair>(context: context, builder: (_) => _AddPairDialog(day: day, suggestions: suggestions, canShareWithGroup: isEditor));
+              if (added == null) return;
+              if (!added.forGroup) {
+                await repo.save(added.override);
                 ref.invalidate(overridesProvider);
+                return;
+              }
+              try {
+                await actions.saveOverrides([added.override]);
+                messenger.showSnackBar(const SnackBar(content: Text('Сохранено для всей группы')));
+              } on SharedApiException catch (e) {
+                messenger.showSnackBar(SnackBar(content: Text(e.message)));
               }
             },
           ),
@@ -527,10 +580,20 @@ class _MoveDialogState extends State<_MoveDialog> {
   }
 }
 
+/// Новая пара из окна «Своя пара»: сама правка и кому она видна.
+class _NewPair {
+  const _NewPair(this.override, {required this.forGroup});
+  final Override override;
+  final bool forGroup;
+}
+
 class _AddPairDialog extends StatefulWidget {
-  const _AddPairDialog({required this.day, this.suggestions = PairSuggestions.empty});
+  const _AddPairDialog({required this.day, this.suggestions = PairSuggestions.empty, this.canShareWithGroup = false});
   final DateTime day;
   final PairSuggestions suggestions;
+
+  /// Староста может добавить пару всей группе.
+  final bool canShareWithGroup;
 
   @override
   State<_AddPairDialog> createState() => _AddPairDialogState();
@@ -544,6 +607,7 @@ class _AddPairDialogState extends State<_AddPairDialog> {
   int _pair = 1;
   LessonKind _kind = LessonKind.practice;
   bool _repeat = false;
+  late bool _forGroup = widget.canShareWithGroup;
 
   @override
   void dispose() {
@@ -556,8 +620,10 @@ class _AddPairDialogState extends State<_AddPairDialog> {
 
   @override
   Widget build(BuildContext context) {
+    // Один раз в неделю повторять экзамен или аттестацию незачем
+    final canRepeat = !_kind.isAssessment;
     return AlertDialog(
-      title: const Text('Своя пара'),
+      title: Text(widget.canShareWithGroup ? 'Новая пара' : 'Своя пара'),
       content: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('Номер пары'),
@@ -566,8 +632,8 @@ class _AddPairDialogState extends State<_AddPairDialog> {
             for (var p = 1; p <= 5; p++) ChoiceChip(label: Text('$p'), selected: _pair == p, onSelected: (_) => setState(() => _pair = p)),
           ]),
           const SizedBox(height: Gap.md),
-          Wrap(spacing: Gap.sm, children: [
-            for (final k in [LessonKind.lecture, LessonKind.practice])
+          Wrap(spacing: Gap.sm, runSpacing: Gap.xs, children: [
+            for (final k in [LessonKind.lecture, LessonKind.practice, ...announceKinds])
               ChoiceChip(label: Text(k.title), selected: _kind == k, onSelected: (_) => setState(() => _kind = k)),
           ]),
           const SizedBox(height: Gap.md),
@@ -578,8 +644,18 @@ class _AddPairDialogState extends State<_AddPairDialog> {
           SuggestField(controller: _teacher, label: 'Преподаватель', options: widget.suggestions.teachers),
           const SizedBox(height: Gap.md),
           TextField(controller: _note, decoration: const InputDecoration(labelText: 'Заметка')),
-          const SizedBox(height: Gap.sm),
-          _RepeatSwitch(day: widget.day, value: _repeat, onChanged: (v) => setState(() => _repeat = v)),
+          if (canRepeat) ...[
+            const SizedBox(height: Gap.sm),
+            _RepeatSwitch(day: widget.day, value: _repeat, onChanged: (v) => setState(() => _repeat = v)),
+          ],
+          if (widget.canShareWithGroup)
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Для всей группы'),
+              subtitle: Text(_forGroup ? 'Увидят все студенты группы, обе подгруппы' : 'Только у вас на телефоне'),
+              value: _forGroup,
+              onChanged: (v) => setState(() => _forGroup = v),
+            ),
         ]),
       ),
       actions: [
@@ -589,16 +665,19 @@ class _AddPairDialogState extends State<_AddPairDialog> {
               ? null
               : () => Navigator.pop(
                     context,
-                    Override(
-                      date: widget.day,
-                      pair: _pair,
-                      type: OverrideType.add,
-                      subject: _subject.text.trim(),
-                      room: blankToNull(_room.text),
-                      teacher: blankToNull(_teacher.text),
-                      note: blankToNull(_note.text),
-                      kind: _kind,
-                      repeatWeekly: _repeat,
+                    _NewPair(
+                      Override(
+                        date: widget.day,
+                        pair: _pair,
+                        type: OverrideType.add,
+                        subject: _subject.text.trim(),
+                        room: blankToNull(_room.text),
+                        teacher: blankToNull(_teacher.text),
+                        note: blankToNull(_note.text),
+                        kind: _kind,
+                        repeatWeekly: canRepeat && _repeat,
+                      ),
+                      forGroup: widget.canShareWithGroup && _forGroup,
                     ),
                   ),
           child: const Text('Добавить'),

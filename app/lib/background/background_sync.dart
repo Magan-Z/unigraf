@@ -9,6 +9,8 @@ import 'package:workmanager/workmanager.dart';
 import '../app_outputs.dart';
 import '../app_state.dart';
 import '../config.dart';
+import '../core/formatting.dart';
+import '../domain/assessments.dart';
 
 const _uniqueName = 'unigraf-background-sync';
 const _taskName = 'syncSchedule';
@@ -33,6 +35,17 @@ Future<void> runBackgroundSync(ProviderContainer container) async {
           id: 3,
           title: fresh.teacherHomework.length == 1 ? 'Преподаватель добавил ДЗ' : 'Преподаватели добавили ДЗ: ${fresh.teacherHomework.length}',
           body: fresh.teacherHomework.take(3).map((h) => '${h.subject}${h.author == null ? '' : ' (${h.author})'}: ${h.text}').join('\n'),
+        );
+      }
+      if (fresh.assessments.isNotEmpty) {
+        final list = fresh.assessments;
+        await gateway.showNow(
+          id: 4,
+          title: list.length == 1 ? 'Староста объявил: ${list.first.kind!.title.toLowerCase()}' : 'Староста сделал объявления: ${list.length}',
+          body: list.take(3).map((o) {
+            final note = visibleNote(o.kind!, o.note);
+            return '${o.subject ?? o.matchSubject ?? 'Пара'} · ${dayTitle(o.date)}, ${o.pair} пара${note == null ? '' : ' · $note'}';
+          }).join('\n'),
         );
       }
     } catch (_) {}

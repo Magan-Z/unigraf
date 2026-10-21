@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_state.dart';
 import '../../core/bells.dart';
 import '../../core/formatting.dart';
+import '../../domain/assessments.dart';
 import '../../domain/models.dart';
 import '../../theme/next_design.dart';
 import '../../theme/subject_palette.dart';
@@ -24,6 +25,18 @@ class KindBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    // Аттестация, зачёт и экзамен заметны сразу: яркая метка с значком, цвет предмета не нужен
+    if (kind.isAssessment) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: Gap.sm, vertical: 3),
+        decoration: BoxDecoration(color: scheme.error, borderRadius: BorderRadius.circular(Radii.sm - 4)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.quiz_rounded, size: 15, color: scheme.onError),
+          const SizedBox(width: Gap.xs),
+          Text(kind.title, style: theme.textTheme.labelMedium?.copyWith(color: scheme.onError, fontWeight: FontWeight.w700)),
+        ]),
+      );
+    }
     final (bg, fg) = tone != null
         ? (tone!.accent.withValues(alpha: 0.16), tone!.onContainer)
         : (scheme.secondaryContainer, scheme.onSecondaryContainer);
@@ -191,7 +204,8 @@ class LessonTile extends ConsumerWidget {
 /// Подпись под парой: заметка из правки или «изменено вами» / «изменено старостой в 14:20».
 /// Время показывается по Москве; если правка сделана не сегодня — с датой («9 октября в 14:20»).
 String? lessonNote(ResolvedLesson l, DateTime now) {
-  if (l.note != null) return l.note;
+  final note = visibleNote(l.kind, l.note);
+  if (note != null) return note;
   if (l.isPersonal) return 'изменено вами';
   if (!l.isGroup) return null;
   final at = l.groupChangedAt;

@@ -3,17 +3,22 @@
 import 'dart:math';
 
 
+import '../../core/bells.dart';
 import '../../domain/group_shared.dart';
+import '../../domain/models.dart';
 import '../local/database.dart';
 import '../remote/shared_api.dart';
 
 /// Результат обновления: что нового пришло.
 class GroupSyncResult {
-  const GroupSyncResult({required this.state, this.newHomework = const [], this.newTeacherHomework = const []});
+  const GroupSyncResult({required this.state, this.newHomework = const [], this.newTeacherHomework = const [], this.newAssessments = const []});
   final GroupSharedState state;
 
   /// ДЗ преподавателей, которых раньше в телефоне не было.
   final List<GroupHomeworkRow> newTeacherHomework;
+
+  /// Аттестации, зачёты и экзамены, объявленные старостой, о которых телефон ещё не знал (только на сегодня и позже).
+  final List<GroupOverrideRow> newAssessments;
 
   /// ДЗ старосты, которых раньше в телефоне не было (для уведомления «староста добавил ДЗ»).
   final List<GroupHomeworkRow> newHomework;
@@ -63,7 +68,12 @@ class GroupSharedRepository {
 
     final newHomework = [for (final h in after.homework.values) if (!before.homework.containsKey(h.id)) h];
     final newTeacher = [for (final h in after.teacherHomework.values) if (!before.teacherHomework.containsKey(h.id)) h];
-    return GroupSyncResult(state: after, newHomework: newHomework, newTeacherHomework: newTeacher);
+    final today = moscowToday(time);
+    final newAssessments = [
+      for (final o in after.overrides.values)
+        if (!before.overrides.containsKey(o.id) && o.kind != null && o.kind!.isAssessment && o.type != OverrideType.cancel && !o.date.isBefore(today)) o,
+    ];
+    return GroupSyncResult(state: after, newHomework: newHomework, newTeacherHomework: newTeacher, newAssessments: newAssessments);
   }
 
   /// Забыть всё (например, студент сменил группу).
