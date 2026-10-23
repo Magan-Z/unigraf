@@ -365,6 +365,18 @@ void main() {
       });
     }
 
+    for (final dark in [false, true]) {
+      testWidgets('teacher web login ${dark ? 'dark' : 'light'}', (tester) async {
+        await tester.runAsync(loadFonts);
+        await shoot(tester, '8-web-login-${dark ? 'dark' : 'light'}', dark: dark, noProfile: true, prefs: {...teacherPrefs, ...session}, sharedApi: sentBackend().api(), dir: teacherDir, act: () async {
+          await tester.tap(find.text('ДЗ').last);
+          await tester.pump(const Duration(milliseconds: 400));
+          await tester.tap(find.text('Отправить ДЗ с компьютера'));
+          await tester.pump(const Duration(milliseconds: 600));
+        });
+      });
+    }
+
     testWidgets('teacher homework without code', (tester) async {
       await tester.runAsync(loadFonts);
       await shoot(tester, '4-homework-nocode', dark: false, noProfile: true, prefs: teacherPrefs, sharedApi: FakeBackend().api(), dir: teacherDir, act: () async {

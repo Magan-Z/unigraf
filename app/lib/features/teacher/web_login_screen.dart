@@ -1,4 +1,4 @@
-// «Вход на компьютере»: преподаватель подтверждает с телефона вход на странице «Отправить ДЗ с компьютера».
+// «Отправить ДЗ с компьютера»: преподаватель подтверждает с телефона вход на странице «Отправить ДЗ с компьютера».
 // Страница показывает QR, 4-значное число и текстовый код. QR сканируем камерой и вводим число с экрана (защита от чужого QR),
 // текстовый код вводим вручную (для веб-версии и телефонов без камеры). Здесь же список компьютеров, где вход ещё открыт.
 
@@ -31,6 +31,7 @@ class WebLoginScreen extends ConsumerStatefulWidget {
 
 class _WebLoginScreenState extends ConsumerState<WebLoginScreen> {
   final _code = TextEditingController();
+  final _codeFocus = FocusNode();
   List<WebSessionInfo>? _sessions;
   String? _sessionsError;
   String? _message; // результат последнего входа
@@ -50,6 +51,7 @@ class _WebLoginScreenState extends ConsumerState<WebLoginScreen> {
   void dispose() {
     _refresh?.cancel();
     _code.dispose();
+    _codeFocus.dispose();
     super.dispose();
   }
 
@@ -95,6 +97,10 @@ class _WebLoginScreenState extends ConsumerState<WebLoginScreen> {
     }
     final number = await showDialog<String>(context: context, builder: (_) => const _NumberDialog());
     if (number == null || !mounted) return;
+    if (number == _useCodeInstead) {
+      _codeFocus.requestFocus();
+      return;
+    }
     await _approve(id, number: number);
   }
 
@@ -121,11 +127,11 @@ class _WebLoginScreenState extends ConsumerState<WebLoginScreen> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Вход на компьютере')),
+      appBar: AppBar(title: const Text('ДЗ с компьютера')),
       body: ListView(padding: const EdgeInsets.all(Gap.lg), children: [
-        Text('Отправляйте ДЗ студентам с компьютера в аудитории, не перенося файлы на телефон.', style: theme.textTheme.bodyLarge),
-        const SizedBox(height: Gap.sm),
-        Text('1. Откройте на компьютере страницу:', style: theme.textTheme.bodyMedium),
+        Text('Файлы лежат на компьютере в аудитории? Отправьте ДЗ оттуда, не перенося их на телефон.', style: theme.textTheme.bodyLarge),
+        const SizedBox(height: Gap.lg),
+        Text('Откройте на компьютере страницу', style: theme.textTheme.titleMedium),
         const SizedBox(height: Gap.xs),
         if (scheduleBaseUrl.isNotEmpty)
           Row(children: [
@@ -140,46 +146,67 @@ class _WebLoginScreenState extends ConsumerState<WebLoginScreen> {
               },
             ),
           ]),
-        const SizedBox(height: Gap.xs),
-        Text('2. Отсканируйте QR с экрана компьютера и введите число, которое там показано. '
-            'Или введите код из 8 знаков.', style: theme.textTheme.bodyMedium),
+        const SizedBox(height: Gap.lg),
+        Text('Войдите одним из двух способов', style: theme.textTheme.titleMedium),
         const SizedBox(height: Gap.sm),
-        Container(
-          padding: const EdgeInsets.all(Gap.md),
-          decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(Radii.sm)),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Icon(Icons.shield_outlined, color: scheme.onSecondaryContainer),
-            const SizedBox(width: Gap.sm),
-            Expanded(
-              child: Text('Входите только на компьютере, где страницу открыли вы сами. Никому не пересылайте код и число с экрана.',
-                  style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSecondaryContainer)),
+        if (!kIsWeb) ...[
+          _MethodCard(
+            icon: Icons.qr_code_scanner_rounded,
+            title: 'По QR-коду',
+            text: 'Наведите камеру на QR на экране компьютера. Потом приложение попросит число из 4 цифр с того же экрана.',
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _busy ? null : _scan,
+                icon: const Icon(Icons.qr_code_scanner_rounded),
+                label: const Text('Сканировать QR'),
+              ),
             ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: Gap.sm),
+            child: Row(children: [
+              const Expanded(child: Divider()),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Gap.md),
+                child: Text('или', style: theme.textTheme.labelLarge?.copyWith(color: scheme.onSurfaceVariant)),
+              ),
+              const Expanded(child: Divider()),
+            ]),
+          ),
+        ],
+        _MethodCard(
+          icon: Icons.keyboard_alt_outlined,
+          title: 'По коду',
+          text: 'Код из 8 знаков показан на экране компьютера. Камера и число с экрана не нужны.',
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            TextField(
+              controller: _code,
+              focusNode: _codeFocus,
+              enabled: !_busy,
+              textCapitalization: TextCapitalization.characters,
+              textInputAction: TextInputAction.done,
+              inputFormatters: [LengthLimitingTextInputFormatter(9)],
+              onSubmitted: (_) => _submitCode(),
+              decoration: const InputDecoration(labelText: 'Код из 8 знаков', hintText: 'ABCD-EFGH', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: Gap.sm),
+            FilledButton.tonal(onPressed: _busy ? null : _submitCode, child: Text(_busy ? 'Проверяем…' : 'Войти по коду')),
           ]),
         ),
-        const SizedBox(height: Gap.lg),
-        if (!kIsWeb) ...[
-          FilledButton.icon(
-            onPressed: _busy ? null : _scan,
-            icon: const Icon(Icons.qr_code_scanner_rounded),
-            label: const Text('Сканировать QR'),
-          ),
-          const SizedBox(height: Gap.lg),
-        ],
-        TextField(
-          controller: _code,
-          enabled: !_busy,
-          textCapitalization: TextCapitalization.characters,
-          textInputAction: TextInputAction.done,
-          inputFormatters: [LengthLimitingTextInputFormatter(9)],
-          onSubmitted: (_) => _submitCode(),
-          decoration: const InputDecoration(labelText: 'Код с экрана компьютера', hintText: 'ABCD-EFGH', border: OutlineInputBorder()),
-        ),
-        const SizedBox(height: Gap.sm),
-        OutlinedButton(onPressed: _busy ? null : _submitCode, child: Text(_busy ? 'Проверяем…' : 'Войти по коду')),
         if (_message != null) ...[
           const SizedBox(height: Gap.md),
           Text(_message!, style: theme.textTheme.bodyMedium?.copyWith(color: _messageIsError ? scheme.error : scheme.primary)),
         ],
+        const SizedBox(height: Gap.lg),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(Icons.shield_outlined, size: 20, color: scheme.onSurfaceVariant),
+          const SizedBox(width: Gap.sm),
+          Expanded(
+            child: Text('Входите только на компьютере, где страницу открыли вы сами. Никому не пересылайте код и число с экрана.',
+                style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+          ),
+        ]),
         const SizedBox(height: Gap.xl),
         Text('Компьютеры, где вход открыт', style: theme.textTheme.titleMedium),
         const SizedBox(height: Gap.sm),
@@ -205,7 +232,45 @@ class _WebLoginScreenState extends ConsumerState<WebLoginScreen> {
   String _clock(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 }
 
-/// Окно ввода числа с экрана компьютера (4 цифры).
+/// Способ входа: значок, название, пояснение и то, что нужно сделать.
+class _MethodCard extends StatelessWidget {
+  const _MethodCard({required this.icon, required this.title, required this.text, required this.child});
+  final IconData icon;
+  final String title;
+  final String text;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(Gap.lg),
+      decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(Radii.lg)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(Radii.sm)),
+            child: Icon(icon, color: scheme.onPrimaryContainer),
+          ),
+          const SizedBox(width: Gap.md),
+          Expanded(child: Text(title, style: theme.textTheme.titleMedium)),
+        ]),
+        const SizedBox(height: Gap.md),
+        Text(text, style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
+        const SizedBox(height: Gap.md),
+        child,
+      ]),
+    );
+  }
+}
+
+/// Результат окна числа, когда вместо числа нужно ввести код из 8 знаков.
+const _useCodeInstead = 'use-code';
+
+/// Окно ввода числа с экрана компьютера (4 цифры). Число и код из 8 знаков разные: окно прямо об этом говорит.
 class _NumberDialog extends StatefulWidget {
   const _NumberDialog();
 
@@ -224,10 +289,11 @@ class _NumberDialogState extends State<_NumberDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return AlertDialog(
-      title: const Text('Число с экрана компьютера'),
+      title: const Text('Введите число с экрана'),
       content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Введите 4 цифры, которые показаны рядом с QR на компьютере. Если там их нет или вы не открывали страницу сами, нажмите «Отмена».'),
+        const Text('4 цифры под QR-кодом на компьютере. Это не код из 8 знаков. Если вы сами не открывали страницу, нажмите «Отмена».'),
         const SizedBox(height: Gap.md),
         TextField(
           controller: _number,
@@ -237,7 +303,12 @@ class _NumberDialogState extends State<_NumberDialog> {
           textInputAction: TextInputAction.done,
           onChanged: (_) => setState(() {}),
           onSubmitted: (v) => v.length == 4 ? Navigator.of(context).pop(v) : null,
-          decoration: const InputDecoration(labelText: 'Число', border: OutlineInputBorder()),
+          decoration: const InputDecoration(labelText: 'Число из 4 цифр', border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: Gap.sm),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(_useCodeInstead),
+          child: Text('Лучше ввести код из 8 знаков', style: theme.textTheme.labelLarge),
         ),
       ]),
       actions: [

@@ -73,7 +73,7 @@ h2 .ic { color: var(--accent); width: 22px; height: 22px; }
 .timer { margin: 10px 0 0; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 21px; }
 .how { margin: 14px 0 12px; max-width: 46ch; text-wrap: pretty; }
 .how.first { margin-top: 0; }
-.how b { font-weight: 700; white-space: nowrap; }
+.how b { font-weight: 700; }
 .or { display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; font-weight: 600; }
 .or::before, .or::after { content: ""; flex: 1; width: 1px; background: var(--line); }
 .token { display: inline-flex; flex-direction: column; gap: 4px; background: var(--accent-soft); color: var(--accent-soft-ink); border-radius: var(--r-sm); padding: 12px 18px 14px; max-width: 100%; }

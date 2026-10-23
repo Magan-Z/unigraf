@@ -16,6 +16,7 @@ import 'package:unigraf/data/local/database.dart';
 import 'package:unigraf/data/remote/shared_api.dart';
 import 'package:unigraf/domain/attachment.dart';
 import 'package:unigraf/domain/web_pair.dart';
+import 'package:unigraf/features/teacher/teacher_homework_screen.dart';
 import 'package:unigraf/features/teacher/web_login_screen.dart';
 
 import 'support/fakes.dart';
@@ -129,7 +130,7 @@ void main() {
     });
   });
 
-  group('экран «Вход на компьютере»', () {
+  group('экран «Отправить ДЗ с компьютера»', () {
     Future<void> open(WidgetTester tester, FakeBackend backend, {String? scanned}) async {
       tester.view.physicalSize = const Size(900, 2200);
       tester.view.devicePixelRatio = 1;
@@ -183,7 +184,8 @@ void main() {
       await open(tester, backend, scanned: 'unigraf://pair/$_pairId');
       await tester.tap(find.text('Сканировать QR'));
       await settle(tester);
-      expect(find.text('Число с экрана компьютера'), findsOneWidget);
+      expect(find.text('Введите число с экрана'), findsOneWidget);
+      expect(find.textContaining('Это не код из 8 знаков'), findsOneWidget);
       expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Войти')).onPressed, isNull); // пока цифр меньше четырёх
 
       await tester.enterText(find.byType(TextField).last, '1111');
@@ -200,6 +202,54 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Войти'));
       await settle(tester);
       expect(backend.approvedLogins, [_pairId]);
+    });
+
+    testWidgets('в окне числа можно перейти к вводу кода из 8 знаков', (tester) async {
+      final backend = FakeBackend();
+      await open(tester, backend, scanned: 'unigraf://pair/$_pairId');
+      await tester.tap(find.text('Сканировать QR'));
+      await settle(tester);
+      await tester.tap(find.text('Лучше ввести код из 8 знаков'));
+      await settle(tester);
+      expect(find.text('Введите число с экрана'), findsNothing);
+      expect(backend.approvedLogins, isEmpty);
+      expect(tester.widget<TextField>(find.byType(TextField)).focusNode!.hasFocus, isTrue);
+    });
+
+    testWidgets('оба способа входа названы на экране', (tester) async {
+      final backend = FakeBackend();
+      await open(tester, backend);
+      expect(find.text('Войдите одним из двух способов'), findsOneWidget);
+      expect(find.text('По QR-коду'), findsOneWidget);
+      expect(find.text('По коду'), findsOneWidget);
+      expect(find.textContaining('число с экрана не нужны'), findsOneWidget);
+    });
+
+    testWidgets('в разделе «ДЗ» режима преподавателя есть вход для отправки с компьютера', (tester) async {
+      final backend = FakeBackend();
+      tester.view.physicalSize = const Size(900, 2200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      SharedPreferences.setMockInitialValues({
+        'teacherToken': 'tok-teacher-TEACHCODE', 'teacherCodeName': 'Халиев М.С-У.', 'teacherCodeGroups': ['ofo-1-bi-25'],
+      });
+      final sp = await SharedPreferences.getInstance();
+      final db = AppDatabase(NativeDatabase.memory());
+      await tester.runAsync(() => db.customSelect('select 1').get());
+      addTearDown(() => tester.runAsync(db.close));
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(sp),
+          databaseProvider.overrideWithValue(db),
+          sharedApiProvider.overrideWithValue(backend.api()),
+        ],
+        child: const MaterialApp(home: Scaffold(body: TeacherHomeworkScreen())),
+      ));
+      await settle(tester);
+      expect(find.text('Отправить ДЗ с компьютера'), findsOneWidget);
+      await tester.tap(find.text('Отправить ДЗ с компьютера'));
+      await settle(tester);
+      expect(find.text('Войдите одним из двух способов'), findsOneWidget);
     });
 
     testWidgets('чужой QR отклоняется без обращения к серверу', (tester) async {

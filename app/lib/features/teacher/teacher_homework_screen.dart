@@ -1,5 +1,5 @@
 // Вкладка «ДЗ» в режиме преподавателя: «Домашка студентам». Без кода — приглашение ввести код;
-// с кодом — список отправленного (кому, срок, файлы; изменить и удалить) и кнопка «Отправить ДЗ».
+// с кодом — список отправленного (кому, срок, файлы; изменить и удалить), кнопка «Отправить ДЗ» и вход для отправки с компьютера.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,6 +18,7 @@ import '../common/word_fit_text.dart';
 import '../homework/attachment_widgets.dart';
 import 'teacher_code_dialog.dart';
 import 'teacher_homework_sheet.dart';
+import 'web_login_screen.dart';
 
 class TeacherHomeworkScreen extends ConsumerWidget {
   const TeacherHomeworkScreen({super.key});
@@ -81,6 +82,7 @@ class TeacherHomeworkScreen extends ConsumerWidget {
                   style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onTertiaryContainer),
                 ),
               ),
+            const Padding(padding: EdgeInsets.only(bottom: Gap.lg), child: _ComputerCard()),
             ...sent.when(
               loading: () => [const Padding(padding: EdgeInsets.all(Gap.xxl), child: Center(child: CircularProgressIndicator()))],
               error: (e, _) => [_SentError(error: e)],
@@ -101,6 +103,54 @@ class TeacherHomeworkScreen extends ConsumerWidget {
                     ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Вход для отправки ДЗ с компьютера в аудитории: открывает экран с QR и кодом.
+class _ComputerCard extends StatelessWidget {
+  const _ComputerCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Semantics(
+      button: true,
+      label: 'Отправить ДЗ с компьютера. Файлы с аудиторного компьютера: вход по QR-коду или коду',
+      excludeSemantics: true,
+      child: Material(
+        color: scheme.primaryContainer,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.lg)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const WebLoginScreen())),
+          child: Padding(
+            padding: const EdgeInsets.all(Gap.lg),
+            child: Row(children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(Radii.md)),
+                child: Icon(Icons.computer_rounded, color: scheme.onPrimary),
+              ),
+              const SizedBox(width: Gap.md),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Отправить ДЗ с компьютера', style: theme.textTheme.titleMedium?.copyWith(color: scheme.onPrimaryContainer)),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Файлы на аудиторном компьютере? Войдите там по QR или коду',
+                    style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onPrimaryContainer.withValues(alpha: 0.85)),
+                  ),
+                ]),
+              ),
+              const SizedBox(width: Gap.xs),
+              Icon(Icons.chevron_right_rounded, color: scheme.onPrimaryContainer),
+            ]),
+          ),
         ),
       ),
     );
