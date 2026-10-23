@@ -108,6 +108,8 @@ begin
   if total > 167772160 then raise exception 'download_limit'; end if;
   delete from public.download_day where day < current_date - 7;
   delete from public.download_file_day where day < current_date - 7;
+  -- encode(..., 'base64') вставляет перенос строки каждые 76 знаков, а приложение (Dart) такой текст не читает:
+  -- файлы больше ~57 байт не скачивались. Переносы убираем.
   return jsonb_build_object('name', r.name, 'data', translate(encode(r.data, 'base64'), E'\n\r', ''));
 end $$;
 
