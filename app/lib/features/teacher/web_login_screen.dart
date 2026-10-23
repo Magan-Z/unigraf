@@ -2,6 +2,8 @@
 // Страница показывает QR, 4-значное число и текстовый код. QR сканируем камерой и вводим число с экрана (защита от чужого QR),
 // текстовый код вводим вручную (для веб-версии и телефонов без камеры). Здесь же список компьютеров, где вход ещё открыт.
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -34,6 +36,7 @@ class _WebLoginScreenState extends ConsumerState<WebLoginScreen> {
   String? _message; // результат последнего входа
   bool _messageIsError = false;
   bool _busy = false;
+  Timer? _refresh;
 
   TeacherActions get _actions => TeacherActions(ref.container);
 
@@ -45,6 +48,7 @@ class _WebLoginScreenState extends ConsumerState<WebLoginScreen> {
 
   @override
   void dispose() {
+    _refresh?.cancel();
     _code.dispose();
     super.dispose();
   }
@@ -71,6 +75,9 @@ class _WebLoginScreenState extends ConsumerState<WebLoginScreen> {
       _code.clear();
       _say('Готово: на компьютере откроется форма отправки. После отправки ДЗ вход закроется сам.');
       await _loadSessions();
+      // компьютер получает вход не сразу (страница спрашивает сервер раз в пару секунд): обновим список ещё раз
+      _refresh?.cancel();
+      _refresh = Timer(const Duration(seconds: 4), _loadSessions);
     } on SharedApiException catch (e) {
       if (mounted) _say(e.message, error: true);
     } finally {
@@ -120,18 +127,19 @@ class _WebLoginScreenState extends ConsumerState<WebLoginScreen> {
         const SizedBox(height: Gap.sm),
         Text('1. Откройте на компьютере страницу:', style: theme.textTheme.bodyMedium),
         const SizedBox(height: Gap.xs),
-        Row(children: [
-          Expanded(child: SelectableText(teacherPageUrl, style: theme.textTheme.bodyMedium?.copyWith(color: scheme.primary))),
-          IconButton(
-            tooltip: 'Скопировать адрес',
-            icon: const Icon(Icons.copy_rounded),
-            onPressed: () async {
-              final messenger = ScaffoldMessenger.of(context);
-              await Clipboard.setData(ClipboardData(text: teacherPageUrl));
-              messenger.showSnackBar(const SnackBar(content: Text('Адрес скопирован')));
-            },
-          ),
-        ]),
+        if (scheduleBaseUrl.isNotEmpty)
+          Row(children: [
+            Expanded(child: SelectableText(teacherPageUrl, style: theme.textTheme.bodyMedium?.copyWith(color: scheme.primary))),
+            IconButton(
+              tooltip: 'Скопировать адрес',
+              icon: const Icon(Icons.copy_rounded),
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                await Clipboard.setData(ClipboardData(text: teacherPageUrl));
+                messenger.showSnackBar(const SnackBar(content: Text('Адрес скопирован')));
+              },
+            ),
+          ]),
         const SizedBox(height: Gap.xs),
         Text('2. Отсканируйте QR с экрана компьютера и введите число, которое там показано. '
             'Или введите код из 8 знаков.', style: theme.textTheme.bodyMedium),
@@ -274,7 +282,7 @@ class _ScannerPageState extends State<_ScannerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Наведите на QR на компьютере')),
+      appBar: AppBar(title: const Text('Сканируйте QR')),
       body: MobileScanner(
         controller: _controller,
         onDetect: _onDetect,

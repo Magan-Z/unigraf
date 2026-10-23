@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:http/http.dart' as http;
 
 import '../../domain/group_shared.dart';
@@ -172,7 +173,9 @@ class SharedApi {
   /// Качает файл из хранилища по ссылке, которую выдал сервер (только https и только наше хранилище).
   Future<Uint8List> _download(String url) async {
     final uri = Uri.tryParse(url);
-    if (uri == null || uri.scheme != 'https' || !uri.path.startsWith('/storage/v1/object/public/homework/')) {
+    // только https; в отладочной сборке ещё и локальный адрес (проверка на эмуляторе через переадресацию порта)
+    final local = kDebugMode && (uri?.host == 'localhost' || uri?.host == '10.0.2.2');
+    if (uri == null || (uri.scheme != 'https' && !local) || !uri.path.startsWith('/storage/v1/object/public/homework/')) {
       throw const SharedApiException('server', 'неожиданная ссылка на файл');
     }
     try {
