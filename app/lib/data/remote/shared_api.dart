@@ -6,10 +6,12 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:http/http.dart' as http;
 
 import '../../domain/group_shared.dart';
 import '../../domain/teacher_homework.dart';
+import '../../domain/web_pair.dart';
 
 /// Ошибка обращения к серверу. [code] — машинное имя (bad_code, code_used, bad_token, too_many, network, server).
 class SharedApiException implements Exception {
@@ -24,7 +26,15 @@ class SharedApiException implements Exception {
         'too_many_attempts' => 'Слишком много неверных вводов кода. Подождите минуту и повторите',
         'bad_token' => 'Доступ отозван. Введите код заново',
         'too_many' => 'Слишком много записей у группы. Удалите ненужные',
-        'file_too_big' => 'Файл слишком большой для общего сервера (не больше 8 МБ)',
+        'file_too_big' => 'Файл слишком большой для общего сервера',
+        'bad_pair' => 'Такого входа не найдено. Обновите страницу на компьютере и сканируйте новый код',
+        'pair_expired' => 'Код входа устарел или уже использован. Обновите страницу на компьютере',
+        'bad_number' => 'Число не подошло. Введите число, которое сейчас показано на экране компьютера',
+        'bad_ticket' => 'Загрузка файла не разрешена. Повторите отправку',
+        'no_object' => 'Файл не дошёл до сервера. Повторите отправку',
+        'bad_file_type' => 'Такие файлы (программы, скрипты) отправлять нельзя',
+        'bad_file_name' => 'Название файла не подошло. Переименуйте файл',
+        'storage_full' => 'На сервере сейчас нет места для файлов. Дайте студентам ссылку на облако',
         'quota' => 'У группы закончилось место для файлов. Удалите старые ДЗ с файлами',
         'too_many_files' => 'К одному ДЗ можно прикрепить не больше 5 файлов',
         'no_file' => 'Файл не найден на сервере: возможно, староста удалил это ДЗ',
@@ -32,7 +42,8 @@ class SharedApiException implements Exception {
         'bad_groups' => 'Выберите хотя бы одну группу',
         'rate_limit' => 'Слишком много отправок за час. Подождите немного и повторите',
         'bad_batch' => 'Не удалось изменить это ДЗ. Отправьте его заново',
-        'download_limit' => 'Сегодня скачали слишком много файлов, лимит исчерпан. Попробуйте завтра',
+        'download_limit' => 'Скачали слишком много файлов, лимит исчерпан. Попробуйте позже',
+        'storage_not_configured' => 'Сервер ещё не настроен для файлов. Попробуйте позже',
         'network' => 'Нет связи с сервером. Проверьте интернет и повторите',
         _ => 'Ошибка сервера${details == null ? '' : ': $details'}',
       };
@@ -88,7 +99,7 @@ class SharedApi {
     try {
       message = (jsonDecode(text) as Map<String, dynamic>)['message'] as String?;
     } catch (_) {}
-    const known = {'bad_code', 'code_used', 'too_many_attempts', 'bad_token', 'too_many', 'bad_group', 'file_too_big', 'quota', 'too_many_files', 'no_file', 'download_limit', 'forbidden_group', 'bad_groups', 'rate_limit', 'bad_batch'};
+    const known = {'bad_code', 'code_used', 'too_many_attempts', 'bad_token', 'too_many', 'bad_group', 'file_too_big', 'quota', 'too_many_files', 'no_file', 'download_limit', 'forbidden_group', 'bad_groups', 'rate_limit', 'bad_batch', 'bad_pair', 'pair_expired', 'bad_number', 'bad_ticket', 'no_object', 'bad_file_type', 'bad_file_name', 'storage_full', 'storage_not_configured', 'busy'};
     if (message != null && known.contains(message)) throw SharedApiException(message);
     throw SharedApiException('server', message ?? 'HTTP ${response.statusCode}');
   }
@@ -150,10 +161,32 @@ class SharedApi {
       _rpc('put_group_file', {'p_token': token, 'p_id': id, 'p_name': name, 'p_data': base64Encode(bytes)}, timeout: _fileTimeout);
 
   /// Скачивает файл группы по номеру. Читать может любой студент группы.
+  /// Файл на сервере лежит либо в базе (ответ с содержимым base64), либо в хранилище (ответ со ссылкой: качаем по ней).
   Future<Uint8List> getFile(String group, String id) async {
     final r = _asMap(await _rpc('get_group_file', {'p_group': group, 'p_id': id}, timeout: _fileTimeout));
+    final url = r['url'];
+    if (url is String) return _download(url);
     // Postgres вставляет в base64 переносы строк, а Dart их не читает: убираем пробелы и переносы перед разбором
     return base64Decode((r['data'] as String).replaceAll(RegExp(r'\s'), ''));
+  }
+
+  /// Качает файл из хранилища по ссылке, которую выдал сервер (только https и только наше хранилище).
+  Future<Uint8List> _download(String url) async {
+    final uri = Uri.tryParse(url);
+    // только https; в отладочной сборке ещё и локальный адрес (проверка на эмуляторе через переадресацию порта)
+    final local = kDebugMode && (uri?.host == 'localhost' || uri?.host == '10.0.2.2');
+    if (uri == null || (uri.scheme != 'https' && !local) || !uri.path.startsWith('/storage/v1/object/public/homework/')) {
+      throw const SharedApiException('server', 'неожиданная ссылка на файл');
+    }
+    try {
+      final response = await _client.get(uri).timeout(_fileTimeout);
+      if (response.statusCode == 200) return response.bodyBytes;
+      throw response.statusCode == 400 || response.statusCode == 404 ? const SharedApiException('no_file') : SharedApiException('server', 'HTTP ${response.statusCode}');
+    } on SharedApiException {
+      rethrow;
+    } on Exception {
+      throw const SharedApiException('network');
+    }
   }
 
   // ---------- преподаватель ----------
@@ -183,4 +216,59 @@ class SharedApi {
   /// Загружает файл преподавателя (один раз для всех групп отправки).
   Future<void> putTeacherFile(String token, String id, String name, Uint8List bytes) =>
       _rpc('put_teacher_file', {'p_token': token, 'p_id': id, 'p_name': name, 'p_data': base64Encode(bytes)}, timeout: _fileTimeout);
+
+  // ---------- вход на компьютере и файлы в хранилище ----------
+
+  /// Подтверждает вход на компьютере. [ref] — номер запроса из QR (тогда нужно [number] с экрана) или текстовый код.
+  Future<void> webPairApprove(String token, String ref, {String? number}) async {
+    final r = _asMap(await _rpc('web_pair_approve', {'p_teacher_token': token, 'p_ref': ref, 'p_number': ?number}));
+    if (r['ok'] != true) {
+      final message = r['message'];
+      throw SharedApiException(message is String && _knownApproveRefusals.contains(message) ? message : 'server', null);
+    }
+  }
+
+  static const _knownApproveRefusals = {'bad_pair', 'pair_expired', 'bad_number', 'too_many_attempts'};
+
+  Future<List<WebSessionInfo>> webSessions(String token) async {
+    final r = await _rpc('web_sessions_list', {'p_teacher_token': token});
+    if (r is! List) throw const SharedApiException('server', 'неожиданный ответ');
+    return [for (final s in r) WebSessionInfo.fromJson(s as Map<String, dynamic>)];
+  }
+
+  Future<void> webSessionRevoke(String token, String id) => _rpc('web_session_revoke', {'p_teacher_token': token, 'p_id': id});
+
+  /// Билет на загрузку файлов в хранилище (живёт полчаса, до 5 файлов).
+  Future<String> teacherUploadTicket(String token) async {
+    final r = _asMap(await _rpc('teacher_upload_ticket', {'p_token': token}));
+    final ticket = r['ticket'];
+    if (ticket is String) return ticket;
+    throw const SharedApiException('server', 'неожиданный ответ');
+  }
+
+  /// Кладёт файл в хранилище по билету (имя в хранилище: билет/номер файла). Ограничения проверяет само хранилище: до 15 МБ.
+  Future<void> uploadToStorage(String ticket, String id, Uint8List bytes) async {
+    final base = baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
+    final http.Response response;
+    try {
+      response = await _client
+          .post(
+            Uri.parse('$base/storage/v1/object/homework/$ticket/$id'),
+            headers: {'apikey': key, 'Authorization': 'Bearer $key', 'Content-Type': 'application/octet-stream'},
+            body: bytes,
+          )
+          .timeout(_fileTimeout);
+    } on Exception {
+      throw const SharedApiException('network');
+    }
+    if (response.statusCode >= 200 && response.statusCode < 300) return;
+    final body = utf8.decode(response.bodyBytes, allowMalformed: true);
+    if (body.contains('EntityTooLarge') || response.statusCode == 413) throw const SharedApiException('file_too_big');
+    if (body.contains('AccessDenied') || response.statusCode == 403) throw const SharedApiException('bad_ticket');
+    throw SharedApiException('server', 'хранилище: HTTP ${response.statusCode}');
+  }
+
+  /// Сообщает серверу, что файл загружен: он проверит объект, размер и квоту и свяжет файл с преподавателем.
+  Future<void> registerTeacherFile(String token, String id, String ticket, String name) =>
+      _rpc('register_teacher_file', {'p_token': token, 'p_id': id, 'p_ticket': ticket, 'p_name': name});
 }

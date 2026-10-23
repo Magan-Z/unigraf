@@ -12,6 +12,7 @@ import 'domain/group_shared.dart';
 import 'domain/models.dart';
 import 'redeem_nonce.dart';
 import 'domain/teacher_homework.dart';
+import 'domain/web_pair.dart';
 
 class TeacherActions {
   TeacherActions(this.container);
@@ -72,4 +73,11 @@ class TeacherActions {
     await _api.deleteTeacherHomework(_session.token, batchId);
     container.invalidate(teacherSentProvider);
   }
+
+  /// Подтверждает вход на компьютере (по QR: [ref] — номер запроса и [number] с экрана; по тексту: только код).
+  Future<void> approveWebLogin(String ref, {String? number}) => _api.webPairApprove(_session.token, ref, number: number);
+
+  Future<List<WebSessionInfo>> webSessions() => _api.webSessions(_session.token);
+
+  Future<void> endWebSession(String id) => _api.webSessionRevoke(_session.token, id);
 }

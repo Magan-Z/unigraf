@@ -12,8 +12,14 @@ import '../remote/shared_api.dart';
 import 'attachment_store.dart';
 
 /// Лимиты общего сервера (те же числа проверяет и сам сервер).
-const maxGroupFileBytes = 8 * 1024 * 1024;
+const maxGroupFileBytes = 8 * 1024 * 1024; // староста: файл лежит в базе сервера
+
+/// Преподаватель: файлы лежат в хранилище сервера (с версии 0.6.0), поэтому можно крупнее.
+const maxTeacherFileBytes = 15 * 1024 * 1024;
 const maxGroupFilesPerHomework = 5;
+
+// Программы и скрипты преподаватель отправлять не может (так же проверяет сервер)
+final _blockedFile = RegExp(r'\.(exe|apk|bat|cmd|com|msi|scr|js|jse|vbs|vbe|wsf|ps1|sh|jar|dll|lnk|reg|hta|cpl)$');
 
 class GroupFiles {
   GroupFiles({required this.api, required this.store, required this.prefs});
@@ -77,17 +83,41 @@ class GroupFiles {
   }
 
   /// Загружает файлы на сервер. Возвращает описания для записи ДЗ и пары «номер → локальная копия» (чтобы староста не качал своё же).
+  /// Файлы преподавателя идут в хранилище (до 15 МБ); если сервер ещё без хранилища, файлы до 8 МБ уходят старым путём.
   Future<({List<GroupFileRef> refs, Map<String, Attachment> local})> upload(String token, List<Attachment> files, String Function() newId, {bool teacher = false}) async {
     if (files.length > maxGroupFilesPerHomework) throw const SharedApiException('too_many_files');
-    final refs = <GroupFileRef>[];
-    final local = <String, Attachment>{};
+    final limit = teacher ? maxTeacherFileBytes : maxGroupFileBytes;
+    // Читаем и проверяем всё до первой отправки: ничего лишнего на сервер не уйдёт
+    final loaded = <(Attachment, Uint8List)>[];
     for (final a in files) {
       final bytes = await store.readBytes(a);
       if (bytes == null) throw const SharedApiException('server', 'файл не найден в памяти телефона');
-      if (bytes.length > maxGroupFileBytes) throw const SharedApiException('file_too_big');
+      if (bytes.length > limit) throw const SharedApiException('file_too_big');
+      if (teacher && _blockedFile.hasMatch(a.name.toLowerCase())) throw const SharedApiException('bad_file_type');
+      loaded.add((a, bytes));
+    }
+    String? ticket;
+    var legacy = !teacher;
+    if (teacher && loaded.isNotEmpty) {
+      try {
+        ticket = await api.teacherUploadTicket(token);
+      } on SharedApiException catch (e) {
+        // сервер без хранилища: все файлы не больше 8 МБ можно отправить старым путём
+        if (e.code != 'server' || loaded.any((f) => f.$2.length > maxGroupFileBytes)) rethrow;
+        legacy = true;
+      }
+    }
+    final refs = <GroupFileRef>[];
+    final local = <String, Attachment>{};
+    for (final (a, bytes) in loaded) {
       final id = newId();
       final name = cleanFileName(a.name);
-      await (teacher ? api.putTeacherFile(token, id, name, bytes) : api.putFile(token, id, name, bytes));
+      if (legacy) {
+        await (teacher ? api.putTeacherFile(token, id, name, bytes) : api.putFile(token, id, name, bytes));
+      } else {
+        await api.uploadToStorage(ticket!, id, bytes);
+        await api.registerTeacherFile(token, id, ticket, name);
+      }
       refs.add(GroupFileRef(id: id, name: name, size: bytes.length));
       local[id] = a;
     }

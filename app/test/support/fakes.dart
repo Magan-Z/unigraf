@@ -197,6 +197,17 @@ class FakeBackend {
   final teacherRows = <String, Map<String, dynamic>>{}; // id строки → строка (с group_id, batch_id, author)
   var _batch = 0;
 
+  /// Вход на компьютере: запросы со страницы (номер запроса → число и текстовый код), одобренные входы, список компьютеров.
+  final webPairs = <String, ({String number, String code})>{'11111111-1111-4111-8111-111111111111': (number: '4242', code: 'QAG3V3FY')};
+  final approvedLogins = <String>[];
+  final webSessions = <Map<String, dynamic>>[];
+
+  /// Хранилище файлов преподавателя (Часть 10). false — сервер без него (функции билета и регистрации не найдены).
+  bool storageEnabled = true;
+  final storageObjects = <String, List<int>>{}; // «билет/номер файла» → содержимое
+  final storagePaths = <String, String>{}; // номер файла → путь в хранилище (после register_teacher_file)
+  var _tickets = 0;
+
   String _stamp() => DateTime.utc(2026, 10, 9, 12, 0, _clock++).toIso8601String();
 
   Map<String, dynamic> override({String id = 'o1', int pair = 4, String type = 'replace', String? room = '3-33', String? hash, String date = '2026-10-07', String? note}) => {
@@ -209,6 +220,20 @@ class FakeBackend {
       {'id': id, 'subject': subject, 'body': text, 'due_date': due, 'kind': null, 'files': files, 'deleted': false, 'updated_at': _stamp()};
 
   SharedApi api() => SharedApi('https://fake.test', 'key', client: MockClient((request) async {
+        // хранилище: загрузка по билету и публичное скачивание
+        if (request.url.path.startsWith('/storage/v1/object/')) {
+          final isPublic = request.url.path.startsWith('/storage/v1/object/public/homework/');
+          final name = request.url.path.replaceFirst(isPublic ? '/storage/v1/object/public/homework/' : '/storage/v1/object/homework/', '');
+          calls.add(isPublic ? 'storage_get' : 'storage_post');
+          if (isPublic) {
+            final b = storageObjects[name];
+            return b == null ? http.Response('{"error":"not_found"}', 400) : http.Response.bytes(b, 200);
+          }
+          if (request.bodyBytes.length > 15 * 1024 * 1024) return http.Response('{"statusCode":"413","code":"EntityTooLarge"}', 400);
+          if (!storageEnabled || !name.startsWith('tk')) return http.Response('{"statusCode":"403","code":"AccessDenied"}', 400);
+          storageObjects[name] = request.bodyBytes;
+          return http.Response('{"Key":"homework/$name"}', 200);
+        }
         final fn = request.url.pathSegments.last;
         final args = request.body.isEmpty ? <String, dynamic>{} : jsonDecode(request.body) as Map<String, dynamic>;
         calls.add(fn);
@@ -310,6 +335,33 @@ class FakeBackend {
                   'groups': [for (final r in e.value) {'id': r['group_id'], 'subgroup': r['subgroup']}],
                 },
             ]);
+          case 'web_pair_approve':
+            if (!(args['p_teacher_token'] as String).startsWith('tok-teacher-')) return fail('bad_token');
+            final ref = args['p_ref'] as String;
+            final byId = webPairs[ref];
+            if (byId != null) {
+              if (args['p_number'] != byId.number) return fail('bad_number');
+            } else if (!webPairs.values.any((p) => p.code == ref)) {
+              return fail('bad_pair');
+            }
+            approvedLogins.add(ref);
+            return ok({'ok': true, 'teacher': 'Халиев М.С-У.'});
+          case 'web_sessions_list':
+            return ok(webSessions);
+          case 'web_session_revoke':
+            webSessions.removeWhere((s) => s['id'] == args['p_id']);
+            return http.Response('', 204);
+          case 'teacher_upload_ticket':
+            if (!storageEnabled) return http.Response(jsonEncode({'message': 'Could not find the function public.teacher_upload_ticket'}), 404);
+            return ok({'ticket': 'tk${_tickets++}'});
+          case 'register_teacher_file':
+            final path = '${args['p_ticket']}/${args['p_id']}';
+            final bytes = storageObjects[path];
+            if (bytes == null) return fail('no_object');
+            if ((args['p_name'] as String).toLowerCase().endsWith('.exe')) return fail('bad_file_type');
+            files[args['p_id'] as String] = (name: args['p_name'] as String, bytes: bytes);
+            storagePaths[args['p_id'] as String] = path;
+            return http.Response('', 204);
           case 'put_teacher_file':
             if (args['p_token'] == null) return fail('bad_token');
             files[args['p_id'] as String] = (name: args['p_name'] as String, bytes: base64Decode(args['p_data'] as String));
@@ -341,6 +393,8 @@ class FakeBackend {
           case 'get_group_file':
             final f = files[args['p_id']];
             if (f == null) return fail('no_file');
+            final stored = storagePaths[args['p_id']];
+            if (stored != null) return ok({'name': f.name, 'size': f.bytes.length, 'url': 'https://fake.test/storage/v1/object/public/homework/$stored'});
             // как настоящий Postgres: encode(..., 'base64') ставит перенос строки каждые 76 знаков
             final wrapped = base64Encode(f.bytes).replaceAllMapped(RegExp(r'.{1,76}'), (m) => '${m[0]}\n').trim();
             return ok({'name': f.name, 'data': wrapped});

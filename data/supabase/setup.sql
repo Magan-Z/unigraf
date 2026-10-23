@@ -817,3 +817,443 @@ revoke execute on function public.purge_expired_homework() from public, anon, au
 
 create extension if not exists pg_cron with schema pg_catalog;
 select cron.schedule('unigraf-purge-expired-homework', '0 0 * * *', $$select public.purge_expired_homework()$$);
+
+-- ============================================================================
+-- Часть 10 (миграция web_teacher_page): страница «Отправить ДЗ с компьютера» и файлы до 15 МБ в Supabase Storage.
+-- Только добавляет: новые таблицы и функции; из старых функций заменены три (check_teacher, put_teacher_homework, get_group_file,
+-- их прежний текст — data/supabase/backup-before-part10.sql), teacher_row, get_group_data и очистка не менялись.
+-- Убрать всё это: data/supabase/rollback-part10.sql. Приложения 0.5.1 и старше продолжают работать (файлы из Storage они не скачают).
+--
+-- 1) Вход с компьютера. Страница вызывает web_pair_start() и показывает QR (там id запроса), 4-значное число и текстовый код из 8 знаков.
+--    Преподаватель в приложении (токен телефона) вызывает web_pair_approve(токен, id или текстовый код, число): для QR нужно число
+--    с экрана компьютера (защита от QRLjacking), для текстового кода число не нужно. Три неверных числа убивают запрос.
+--    Страница опрашивает web_pair_poll(id, секрет) и один раз получает токен сессии. В базе только его хеш (sha256).
+--    Сессия живёт до 3 часов и до 15 минут без обращений; не больше 2 сессий на преподавателя (старшая закрывается).
+--    Сессия привязана к строке кода и к токену телефона: выдача кода заново (token = null) или удаление кода закрывает сессии.
+-- 2) Токен сессии принимают только check_teacher, put_teacher_homework, teacher_upload_ticket и register_teacher_file
+--    (через teacher_row_any). Удалять, читать список и грузить файл в базу им нельзя. Успешный put_teacher_homework закрывает сессию
+--    в той же транзакции, при любой ошибке сессия остаётся (можно повторить).
+-- 3) Файлы: бакет homework (публичное чтение, UUID в именах, предел 15 МБ). Загрузить объект анонимно можно только по билету
+--    (teacher_upload_ticket): имя <билет>/<uuid>, до 5 объектов на билет, билет живёт 30 минут. Затем register_teacher_file
+--    проверяет объект и создаёт строку group_files (storage_path вместо data). Квота 150 МБ на преподавателя, 800 МБ всего.
+--    get_group_file для таких файлов отдаёт {name, url, size} и считает месячный трафик (потолок 4,5 ГБ, потом download_limit).
+--    Файлы удаляются так: удаление строки group_files (старыми функциями очистки) → триггер кладёт путь в storage_trash →
+--    maintain_web() раз в 10 минут просит API Storage удалить объект через pg_net. Прямой delete из storage.objects файл не стирает!
+-- 4) Настройка под сервер (один раз, значения не в git): адрес проекта и publishable-ключ для вызовов Storage из базы:
+--      insert into public.app_config values ('storage_url', 'https://КОД.supabase.co'), ('storage_key', 'sb_publishable_…')
+--        on conflict (key) do update set value = excluded.value;
+-- 5) Посмотреть состояние: select * from public.web_sessions; select * from public.storage_trash; select * from public.download_month;
+--    select * from cron.job_run_details order by start_time desc limit 10;
+-- ============================================================================
+create extension if not exists pg_net;
+
+insert into storage.buckets (id, name, public, file_size_limit)
+  values ('homework', 'homework', true, 15728640)
+  on conflict (id) do update set public = true, file_size_limit = 15728640;
+
+create table public.app_config (key text primary key, value text not null);
+alter table public.app_config enable row level security;
+revoke all on public.app_config from anon, authenticated;
+
+-- Файлы из Storage: строка group_files без data, с путём объекта
+alter table public.group_files add column storage_path text unique;
+alter table public.group_files alter column data drop not null;
+alter table public.group_files drop constraint group_files_size_check;
+alter table public.group_files add constraint group_files_size_check check (size between 1 and 15728640);
+alter table public.group_files add constraint group_files_data_or_path check ((data is not null) <> (storage_path is not null));
+
+create table public.web_pairs (
+  id            uuid primary key default gen_random_uuid(),
+  secret_hash   text not null,
+  number        text not null check (number ~ '^[0-9]{4}$'),
+  code          text not null unique check (code ~ '^[A-Z0-9]{8}$'),
+  status        text not null default 'pending' check (status in ('pending', 'approved', 'used', 'denied')),
+  fails         smallint not null default 0,
+  teacher_code  text,
+  teacher_token text,
+  created_at    timestamptz not null default now(),
+  expires_at    timestamptz not null default now() + interval '3 minutes'
+);
+create table public.web_sessions (
+  id            uuid primary key default gen_random_uuid(),
+  token_hash    text not null unique,
+  teacher_code  text not null references public.teacher_codes (code) on delete cascade,
+  teacher_token text not null,
+  created_at    timestamptz not null default now(),
+  last_seen     timestamptz not null default now(),
+  expires_at    timestamptz not null default now() + interval '3 hours'
+);
+create index web_sessions_teacher on public.web_sessions (teacher_code);
+create table public.web_limits (
+  kind         text not null,
+  window_start timestamptz not null,
+  n            int not null default 0,
+  primary key (kind, window_start)
+);
+create table public.upload_tickets (
+  ticket       text primary key check (ticket ~ '^[0-9a-f]{24}$'),
+  teacher_code text not null references public.teacher_codes (code) on delete cascade,
+  expires_at   timestamptz not null default now() + interval '30 minutes'
+);
+create index upload_tickets_teacher on public.upload_tickets (teacher_code);
+create table public.storage_trash (
+  path         text primary key,
+  queued_at    timestamptz not null default now(),
+  requested_at timestamptz
+);
+create table public.download_month (month date primary key, bytes bigint not null default 0);
+alter table public.web_pairs      enable row level security;
+alter table public.web_sessions   enable row level security;
+alter table public.web_limits     enable row level security;
+alter table public.upload_tickets enable row level security;
+alter table public.storage_trash  enable row level security;
+alter table public.download_month enable row level security;
+revoke all on public.web_pairs, public.web_sessions, public.web_limits, public.upload_tickets, public.storage_trash,
+              public.download_month from anon, authenticated;
+
+-- Потолки на весь проект: не больше 30 новых запросов входа и 20 неверных попыток за минуту
+create function public.web_hit(p_kind text, p_max int) returns boolean
+language plpgsql security definer set search_path = '' as $$
+declare k int;
+begin
+  insert into public.web_limits (kind, window_start, n) values (p_kind, date_trunc('minute', now()), 1)
+    on conflict (kind, window_start) do update set n = public.web_limits.n + 1
+    returning n into k;
+  if random() < 0.02 then delete from public.web_limits where window_start < now() - interval '1 day'; end if;
+  return k <= p_max;
+end $$;
+
+-- Ответ-отказ обычным ответом с кодом 400 (raise exception откатил бы счётчики неверных попыток), как code_reject в Части 8
+create function public.web_reject(p_reason text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+begin
+  if p_reason <> 'too_many_attempts' then perform public.web_hit('fail', 1000000); end if;
+  perform set_config('response.status', '400', true);
+  return jsonb_build_object('message', p_reason);
+end $$;
+
+create function public.web_locked() returns boolean
+language sql stable security definer set search_path = '' as $$
+  select coalesce((select n from public.web_limits where kind = 'fail' and window_start = date_trunc('minute', now())), 0) >= 20;
+$$;
+
+create function public.web_hash(p_token text) returns text
+language sql immutable set search_path = '' as $$
+  select encode(sha256(convert_to(coalesce(p_token, ''), 'UTF8')), 'hex');
+$$;
+
+-- 1) Вход
+create function public.web_pair_start() returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  alphabet constant text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  secret text := replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
+  c text; num text; v_id uuid; i int; raw bytea;
+begin
+  if not public.web_hit('start', 30) then raise exception 'too_many_attempts'; end if;
+  delete from public.web_pairs where expires_at < now() - interval '10 minutes';
+  if (select count(*) from public.web_pairs where status = 'pending' and expires_at > now()) >= 300 then raise exception 'busy'; end if;
+  loop
+    raw := decode(replace(gen_random_uuid()::text, '-', ''), 'hex');
+    c := '';
+    for i in 0..7 loop c := c || substr(alphabet, get_byte(raw, i) % 31 + 1, 1); end loop;
+    exit when not exists (select 1 from public.web_pairs where code = c);
+  end loop;
+  raw := decode(replace(gen_random_uuid()::text, '-', ''), 'hex');
+  num := lpad(((get_byte(raw, 0) * 65536 + get_byte(raw, 1) * 256 + get_byte(raw, 2)) % 10000)::text, 4, '0');
+  insert into public.web_pairs (secret_hash, number, code) values (public.web_hash(secret), num, c) returning id into v_id;
+  return jsonb_build_object('id', v_id, 'secret', secret, 'number', num, 'code', c, 'expires_in', 180);
+end $$;
+
+create function public.web_pair_poll(p_id uuid, p_secret text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare p public.web_pairs%rowtype; t public.teacher_codes%rowtype; tok text;
+begin
+  select * into p from public.web_pairs where id = p_id and secret_hash = public.web_hash(p_secret);
+  if not found then raise exception 'bad_pair'; end if;
+  if p.status = 'denied' then return jsonb_build_object('status', 'denied'); end if;
+  if p.status = 'used' then return jsonb_build_object('status', 'used'); end if;
+  if p.expires_at < now() then return jsonb_build_object('status', 'expired'); end if;
+  if p.status = 'pending' then return jsonb_build_object('status', 'pending'); end if;
+  -- одобрено: токен отдаётся ровно один раз
+  update public.web_pairs set status = 'used' where id = p.id and status = 'approved' returning * into p;
+  if not found then return jsonb_build_object('status', 'used'); end if;
+  select * into t from public.teacher_codes where code = p.teacher_code and token = p.teacher_token;
+  if not found then return jsonb_build_object('status', 'denied'); end if;
+  tok := replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
+  delete from public.web_sessions where id in (
+    select id from public.web_sessions where teacher_code = t.code order by created_at desc offset 1);
+  insert into public.web_sessions (token_hash, teacher_code, teacher_token) values (public.web_hash(tok), t.code, t.token);
+  return jsonb_build_object('status', 'ok', 'token', tok, 'teacher', t.teacher, 'groups', to_jsonb(t.groups));
+end $$;
+
+create function public.web_pair_approve(p_teacher_token text, p_ref text, p_number text default null) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  t public.teacher_codes%rowtype; p public.web_pairs%rowtype;
+  ref text := lower(trim(coalesce(p_ref, '')));
+  by_id boolean := ref ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+begin
+  t := public.teacher_row(p_teacher_token);
+  if public.web_locked() then return public.web_reject('too_many_attempts'); end if;
+  if by_id then
+    select * into p from public.web_pairs where id = ref::uuid;
+  else
+    select * into p from public.web_pairs where code = upper(regexp_replace(ref, '[^a-z0-9]', '', 'gi'));
+  end if;
+  if not found then return public.web_reject('bad_pair'); end if;
+  if p.status <> 'pending' or p.expires_at < now() then return public.web_reject('pair_expired'); end if;
+  if by_id and p_number is distinct from p.number then
+    update public.web_pairs set fails = fails + 1, status = case when fails + 1 >= 3 then 'denied' else status end where id = p.id;
+    return public.web_reject('bad_number');
+  end if;
+  update public.web_pairs set status = 'approved', teacher_code = t.code, teacher_token = t.token,
+         expires_at = greatest(expires_at, now() + interval '30 seconds') where id = p.id;
+  return jsonb_build_object('ok', true, 'teacher', t.teacher);
+end $$;
+
+create function public.web_sessions_list(p_teacher_token text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare t public.teacher_codes%rowtype;
+begin
+  t := public.teacher_row(p_teacher_token);
+  return coalesce((select jsonb_agg(jsonb_build_object('id', s.id, 'created_at', s.created_at, 'last_seen', s.last_seen) order by s.created_at desc)
+                     from public.web_sessions s where s.teacher_code = t.code and s.expires_at > now()), '[]'::jsonb);
+end $$;
+
+create function public.web_session_revoke(p_teacher_token text, p_id uuid) returns void
+language plpgsql security definer set search_path = '' as $$
+declare t public.teacher_codes%rowtype;
+begin
+  t := public.teacher_row(p_teacher_token);
+  delete from public.web_sessions where id = p_id and teacher_code = t.code;
+end $$;
+
+create function public.web_session_end(p_token text) returns void
+language sql security definer set search_path = '' as $$
+  delete from public.web_sessions where token_hash = public.web_hash(p_token);
+$$;
+
+-- Токен телефона или действующей сессии страницы (для check_teacher, put_teacher_homework, билета и регистрации файла)
+create function public.teacher_row_any(p_token text) returns public.teacher_codes
+language plpgsql security definer set search_path = '' as $$
+declare r public.teacher_codes%rowtype; s public.web_sessions%rowtype;
+begin
+  select * into r from public.teacher_codes where token = p_token and p_token is not null;
+  if found then return r; end if;
+  if p_token is null or p_token !~ '^[0-9a-f]{64}$' then raise exception 'bad_token'; end if;
+  update public.web_sessions set last_seen = now()
+   where token_hash = public.web_hash(p_token) and expires_at > now() and last_seen > now() - interval '15 minutes'
+  returning * into s;
+  if not found then raise exception 'bad_token'; end if;
+  select * into r from public.teacher_codes where code = s.teacher_code and token = s.teacher_token;
+  if not found then raise exception 'bad_token'; end if;
+  return r;
+end $$;
+
+create function public.web_session_close(p_token text) returns void
+language sql security definer set search_path = '' as $$
+  delete from public.web_sessions where token_hash = public.web_hash(p_token);
+$$;
+
+-- check_teacher и put_teacher_homework: то же, что в Части 5, но принимают и токен страницы; успешная отправка закрывает сессию
+create or replace function public.check_teacher(p_token text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare r public.teacher_codes%rowtype;
+begin
+  r := public.teacher_row_any(p_token);
+  return jsonb_build_object('teacher', r.teacher, 'groups', to_jsonb(r.groups));
+end $$;
+
+create or replace function public.put_teacher_homework(p_token text, p_row jsonb) returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare
+  t public.teacher_codes%rowtype; v_batch uuid; fl jsonb; tg jsonb; e record; ids text[] := '{}'; gid text; sg smallint;
+  is_new boolean; n int; g text;
+begin
+  t := public.teacher_row_any(p_token);
+  perform public.purge_tombstones();
+  fl := coalesce(p_row->'files', '[]'::jsonb);
+  if jsonb_typeof(fl) <> 'array' or jsonb_array_length(fl) > 5 then raise exception 'too_many_files'; end if;
+  tg := p_row->'groups';
+  if tg is null or jsonb_typeof(tg) <> 'array' or jsonb_array_length(tg) < 1 or jsonb_array_length(tg) > 80 then raise exception 'bad_groups'; end if;
+  -- каждая цель: {id, subgroup?}; только группы из списка преподавателя, без повторов
+  for e in select value from jsonb_array_elements(tg) loop
+    gid := e.value->>'id';
+    if gid is null or not (gid = any (t.groups)) then raise exception 'forbidden_group'; end if;
+    if gid = any (ids) then raise exception 'bad_groups'; end if;
+    ids := ids || gid;
+  end loop;
+
+  v_batch := coalesce((p_row->>'batch_id')::uuid, gen_random_uuid());
+  if exists (select 1 from public.group_homework where batch_id = v_batch and author is distinct from t.teacher) then raise exception 'bad_batch'; end if;
+  is_new := not exists (select 1 from public.group_homework where batch_id = v_batch and author = t.teacher);
+  if is_new then
+    select count(distinct batch_id) into n from public.group_homework where author = t.teacher and not deleted;
+    if n >= 300 then raise exception 'too_many'; end if;
+    select count(distinct batch_id) into n from public.group_homework where author = t.teacher and updated_at > now() - interval '1 hour';
+    if n >= 30 then raise exception 'rate_limit'; end if;
+  end if;
+
+  -- группы, которых больше нет в пачке, снимаем
+  update public.group_homework set deleted = true, updated_at = now()
+   where batch_id = v_batch and author = t.teacher and not deleted and not (group_id = any (ids));
+
+  foreach g in array ids loop
+    sg := null;
+    select nullif(x.value->>'subgroup', '')::smallint into sg from jsonb_array_elements(tg) x where x.value->>'id' = g;
+    update public.group_homework set subject = p_row->>'subject', body = p_row->>'body', due_date = (p_row->>'due_date')::date,
+           kind = nullif(p_row->>'kind', ''), subgroup = sg, files = fl, deleted = false, updated_at = now()
+     where batch_id = v_batch and author = t.teacher and group_id = g;
+    if not found then
+      select count(*) into n from public.group_homework where group_id = g and author is not null and not deleted;
+      if n >= 100 then raise exception 'too_many'; end if;
+      insert into public.group_homework (group_id, subject, body, due_date, kind, subgroup, files, deleted, updated_at, author, batch_id)
+      values (g, p_row->>'subject', p_row->>'body', (p_row->>'due_date')::date, nullif(p_row->>'kind', ''), sg, fl, false, now(), t.teacher, v_batch);
+    end if;
+  end loop;
+  perform public.purge_teacher_files('teacher-' || substr(md5(lower(t.teacher)), 1, 8));
+  perform public.web_session_close(p_token);
+  return v_batch;
+end $$;
+
+-- 3) Файлы в Storage
+create function public.upload_name_ok(p_name text) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select split_part(p_name, '/', 3) = ''
+     and split_part(p_name, '/', 2) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+     and exists (select 1 from public.upload_tickets t where t.ticket = split_part(p_name, '/', 1) and t.expires_at > now())
+     and (select count(*) from storage.objects o where o.bucket_id = 'homework' and o.name like split_part(p_name, '/', 1) || '/%') < 5;
+$$;
+create function public.in_trash(p_name text) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.storage_trash where path = p_name);
+$$;
+grant execute on function public.upload_name_ok(text), public.in_trash(text) to anon, authenticated;
+
+-- Анонимы: загружать только по билету; видеть и удалять через API только объекты из корзины (скачивание по публичной ссылке от этого не зависит)
+create policy homework_insert on storage.objects for insert to anon, authenticated
+  with check (bucket_id = 'homework' and public.upload_name_ok(name));
+create policy homework_trash_select on storage.objects for select to anon, authenticated
+  using (bucket_id = 'homework' and public.in_trash(name));
+create policy homework_trash_delete on storage.objects for delete to anon, authenticated
+  using (bucket_id = 'homework' and public.in_trash(name));
+
+create function public.teacher_upload_ticket(p_token text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare t public.teacher_codes%rowtype; tk text;
+begin
+  t := public.teacher_row_any(p_token);
+  delete from public.upload_tickets where expires_at < now() - interval '2 hours';
+  if (select count(*) from public.upload_tickets where teacher_code = t.code and expires_at > now()) >= 10 then raise exception 'rate_limit'; end if;
+  tk := substr(replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''), 1, 24);
+  insert into public.upload_tickets (ticket, teacher_code) values (tk, t.code);
+  return jsonb_build_object('ticket', tk);
+end $$;
+
+create function public.register_teacher_file(p_token text, p_id uuid, p_ticket text, p_name text) returns void
+language plpgsql security definer set search_path = '' as $$
+declare t public.teacher_codes%rowtype; g text; sz bigint; used bigint; nm text := btrim(coalesce(p_name, ''));
+begin
+  t := public.teacher_row_any(p_token);
+  g := 'teacher-' || substr(md5(lower(t.teacher)), 1, 8);
+  if length(nm) not between 1 and 200 then raise exception 'bad_file_name'; end if;
+  if lower(nm) ~ '\.(exe|apk|bat|cmd|com|msi|scr|js|jse|vbs|vbe|wsf|ps1|sh|jar|dll|lnk|reg|hta|cpl)$' then raise exception 'bad_file_type'; end if;
+  if not exists (select 1 from public.upload_tickets where ticket = p_ticket and teacher_code = t.code and expires_at > now() - interval '1 hour') then
+    raise exception 'bad_ticket';
+  end if;
+  select (o.metadata->>'size')::bigint into sz from storage.objects o where o.bucket_id = 'homework' and o.name = p_ticket || '/' || p_id::text;
+  if not found then raise exception 'no_object'; end if;
+  if sz is null or sz < 1 or sz > 15728640 then raise exception 'file_too_big'; end if;
+  select coalesce(sum(size), 0) into used from public.group_files where group_id = g;
+  if used + sz > 157286400 then raise exception 'quota'; end if;
+  if (select coalesce(sum(size), 0) from public.group_files where storage_path is not null) + sz > 838860800 then raise exception 'storage_full'; end if;
+  insert into public.group_files (id, group_id, name, size, data, storage_path)
+  values (p_id, g, nm, sz, null, p_ticket || '/' || p_id::text)
+  on conflict (id) do nothing;
+end $$;
+
+-- Удалили строку group_files (любой функцией очистки) → путь объекта в корзину, дальше его стирает maintain_web()
+create function public.group_files_to_trash() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if old.storage_path is not null then
+    insert into public.storage_trash (path) values (old.storage_path) on conflict do nothing;
+  end if;
+  return old;
+end $$;
+create trigger group_files_trash after delete on public.group_files
+  for each row execute function public.group_files_to_trash();
+
+-- get_group_file: как в Части 6, плюс файлы из Storage (ссылка вместо base64, месячный потолок трафика 4,5 ГБ)
+create or replace function public.get_group_file(p_group text, p_id uuid) returns jsonb
+language plpgsql security definer set search_path = '' set statement_timeout = '25s' as $$
+declare r public.group_files%rowtype; cnt int; total bigint; base text;
+begin
+  if p_group is null or p_group !~ '^[a-z0-9-]{3,40}$' then raise exception 'bad_group'; end if;
+  select * into r from public.group_files f
+   where f.id = p_id and (f.group_id = p_group or (f.group_id like 'teacher-%' and exists (
+     select 1 from public.group_homework h, jsonb_array_elements(h.files) e
+      where h.group_id = p_group and h.author is not null and not h.deleted and e->>'id' = p_id::text)));
+  if not found then raise exception 'no_file'; end if;
+  insert into public.download_file_day (day, file_id, n) values (current_date, p_id, 1)
+    on conflict (day, file_id) do update set n = public.download_file_day.n + 1
+    returning n into cnt;
+  if cnt > 100 then raise exception 'download_limit'; end if;
+  if r.storage_path is not null then
+    select value into base from public.app_config where key = 'storage_url';
+    if base is null then raise exception 'storage_not_configured'; end if;
+    insert into public.download_month (month, bytes) values (date_trunc('month', now())::date, r.size)
+      on conflict (month) do update set bytes = public.download_month.bytes + excluded.bytes
+      returning bytes into total;
+    if total > 4831838208 then raise exception 'download_limit'; end if;
+    delete from public.download_month where month < (date_trunc('month', now()) - interval '6 months')::date;
+    return jsonb_build_object('name', r.name, 'size', r.size, 'url', base || '/storage/v1/object/public/homework/' || r.storage_path);
+  end if;
+  insert into public.download_day (day, bytes) values (current_date, r.size)
+    on conflict (day) do update set bytes = public.download_day.bytes + excluded.bytes
+    returning bytes into total;
+  if total > 167772160 then raise exception 'download_limit'; end if;
+  delete from public.download_day where day < current_date - 7;
+  delete from public.download_file_day where day < current_date - 7;
+  return jsonb_build_object('name', r.name, 'data', translate(encode(r.data, 'base64'), E'\n\r', ''));
+end $$;
+
+-- Раз в 10 минут: чистка запросов входа, сессий и билетов; объекты Storage без строки group_files (старше часа) — в корзину;
+-- просьбы к API Storage удалить объекты из корзины (до 200 за раз, повтор не чаще раза в 5 минут)
+create function public.maintain_web() returns void
+language plpgsql security definer set search_path = '' as $$
+declare base text; k text; r record;
+begin
+  delete from public.web_pairs where expires_at < now() - interval '10 minutes';
+  delete from public.web_sessions where expires_at < now() or last_seen < now() - interval '15 minutes';
+  delete from public.upload_tickets where expires_at < now() - interval '2 hours';
+  insert into public.storage_trash (path)
+    select o.name from storage.objects o
+     where o.bucket_id = 'homework' and o.created_at < now() - interval '1 hour'
+       and not exists (select 1 from public.group_files f where f.storage_path = o.name)
+    on conflict do nothing;
+  delete from public.storage_trash t
+   where not exists (select 1 from storage.objects o where o.bucket_id = 'homework' and o.name = t.path);
+  select value into base from public.app_config where key = 'storage_url';
+  select value into k from public.app_config where key = 'storage_key';
+  if base is null or k is null then return; end if;
+  for r in select path from public.storage_trash
+            where requested_at is null or requested_at < now() - interval '5 minutes'
+            order by queued_at limit 200 loop
+    perform net.http_delete(url := base || '/storage/v1/object/homework/' || r.path,
+                            headers := jsonb_build_object('apikey', k, 'Authorization', 'Bearer ' || k));
+    update public.storage_trash set requested_at = now() where path = r.path;
+  end loop;
+end $$;
+
+revoke execute on function public.web_hit(text, int), public.web_reject(text), public.web_locked(), public.web_hash(text),
+  public.teacher_row_any(text), public.web_session_close(text), public.group_files_to_trash(), public.maintain_web()
+  from public, anon, authenticated;
+grant execute on function public.web_pair_start(), public.web_pair_poll(uuid, text), public.web_pair_approve(text, text, text),
+  public.web_sessions_list(text), public.web_session_revoke(text, uuid), public.web_session_end(text),
+  public.teacher_upload_ticket(text), public.register_teacher_file(text, uuid, text, text),
+  public.check_teacher(text), public.put_teacher_homework(text, jsonb), public.get_group_file(text, uuid)
+  to anon, authenticated;
+
+select cron.schedule('unigraf-maintain-web', '*/10 * * * *', $$select public.maintain_web()$$);
