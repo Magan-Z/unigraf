@@ -377,6 +377,24 @@ void main() {
       });
     }
 
+    for (final dark in [false, true]) {
+      testWidgets('teacher send sheet full ${dark ? 'dark' : 'light'}', (tester) async {
+        await tester.runAsync(loadFonts);
+        await shoot(tester, '9-send-sheet-${dark ? 'dark' : 'light'}', dark: dark, noProfile: true, prefs: {...teacherPrefs, ...session}, size: const Size(1080, 3400), sharedApi: sentBackend().api(), dir: teacherDir, act: () async {
+          await tester.tap(find.text('Сегодня').last);
+          await tester.pump(const Duration(milliseconds: 400));
+          await tester.ensureVisible(find.text('Технологическое предпринимательство').last);
+          await tester.pump(const Duration(milliseconds: 300));
+          await tester.longPress(find.text('Технологическое предпринимательство').last);
+          await tester.pump(const Duration(milliseconds: 400));
+          await tester.tap(find.text('Отправить ДЗ студентам'));
+          await tester.pump(const Duration(milliseconds: 700));
+          await tester.enterText(find.byType(TextField).last, 'Подготовить доклад на 5 минут по бизнес-модели');
+          await tester.pump(const Duration(milliseconds: 300));
+        });
+      });
+    }
+
     testWidgets('teacher homework without code', (tester) async {
       await tester.runAsync(loadFonts);
       await shoot(tester, '4-homework-nocode', dark: false, noProfile: true, prefs: teacherPrefs, sharedApi: FakeBackend().api(), dir: teacherDir, act: () async {

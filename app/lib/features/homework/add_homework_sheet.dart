@@ -10,7 +10,7 @@ import '../../data/attachments/attachment_store.dart';
 import '../../data/attachments/group_files.dart';
 import '../../domain/attachment.dart';
 import '../teacher/teacher_homework_sheet.dart';
-import 'attachment_widgets.dart';
+import 'homework_form_widgets.dart';
 import '../../core/formatting.dart';
 import '../../domain/homework.dart';
 import '../../domain/homework_due.dart';
@@ -189,119 +189,116 @@ class _AddHomeworkSheetState extends ConsumerState<_AddHomeworkSheet> {
     final due = _due(data, today);
     final canSave = _subject != null && _text.text.trim().isNotEmpty && due != null;
 
+    final dropdownTheme = InputDecorationTheme(filled: false, border: OutlineInputBorder(borderRadius: BorderRadius.circular(Radii.sm)));
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 8, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Новое ДЗ', style: theme.textTheme.titleLarge),
-            const SizedBox(height: 12),
-            DropdownMenu<String>(
-              key: ValueKey(_subject),
-              expandedInsets: EdgeInsets.zero,
-              label: const Text('Предмет'),
-              initialSelection: _subject,
-              enableFilter: true,
-              dropdownMenuEntries: [for (final s in subjects) DropdownMenuEntry(value: s, label: s)],
-              onSelected: (v) => setState(() {
-                _subject = v;
-                _manualDue = null;
-                _subgroup = null;
-              }),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _text,
-              autofocus: widget.initialSubject != null,
-              minLines: 2,
-              maxLines: 5,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Что задали', border: OutlineInputBorder()),
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 12),
-            Wrap(spacing: 8, children: [
-              ChoiceChip(label: const Text('К любому занятию'), selected: _kind == null, onSelected: (_) => setState(() => _kind = null)),
-              ChoiceChip(label: const Text('К лекции'), selected: _kind == LessonKind.lecture, onSelected: (_) => setState(() => _kind = LessonKind.lecture)),
-              ChoiceChip(label: const Text('К практике'), selected: _kind == LessonKind.practice, onSelected: (_) => setState(() => _kind = LessonKind.practice)),
-            ]),
-            const SizedBox(height: 8),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.event_outlined),
-              title: Text(due == null ? (_subject == null ? 'Выберите предмет' : 'Занятий не найдено — выберите дату') : 'Срок: ${dayTitle(due)}'),
-              subtitle: Text(_manualDue == null ? 'Подставлено автоматически — следующее занятие' : 'Выбрано вручную'),
-              trailing: TextButton(
-                child: const Text('Изменить'),
-                onPressed: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: due ?? today,
-                    firstDate: today.subtract(const Duration(days: 30)),
-                    lastDate: today.add(const Duration(days: 365)),
-                  );
-                  if (picked != null) setState(() => _manualDue = DateTime.utc(picked.year, picked.month, picked.day));
-                },
-              ),
-            ),
-            if (ref.watch(isGroupEditorProvider))
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Для всей группы'),
-                subtitle: Text(_forGroup
-                    ? 'Увидят все студенты группы во вкладке «Староста». Файлы: до $maxGroupFilesPerHomework шт., каждый до ${maxGroupFileBytes ~/ (1024 * 1024)} МБ'
-                    : 'Вы староста: можно задать ДЗ всем сразу'),
-                value: _forGroup,
-                onChanged: (v) => setState(() {
-                  _forGroup = v;
-                  if (!v) _subgroup = null;
-                }),
-              ),
-            if (_splits)
-              Padding(
-                padding: const EdgeInsets.only(bottom: Gap.sm),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Для кого ДЗ', style: theme.textTheme.labelLarge),
-                  const SizedBox(height: Gap.xs),
-                  Wrap(spacing: 8, children: [
-                    ChoiceChip(label: const Text('Всей группе'), selected: _subgroup == null, onSelected: (_) => setState(() => _subgroup = null)),
-                    for (final s in data.schedule.subgroups)
-                      ChoiceChip(label: Text(s.label), selected: _subgroup == s.n, onSelected: (_) => setState(() => _subgroup = s.n)),
-                  ]),
-                ]),
-              ),
-            if (_files.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Wrap(spacing: 8, runSpacing: 8, children: [
-                  for (final f in _files)
-                    AttachmentTile(
-                      attachment: f,
-                      onRemove: () {
-                        ref.read(attachmentStoreProvider).delete(f);
-                        setState(() => _files.remove(f));
-                      },
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Новое ДЗ', style: theme.textTheme.headlineSmall),
+                  const SizedBox(height: Gap.lg),
+                  DropdownMenu<String>(
+                    key: ValueKey(_subject),
+                    expandedInsets: EdgeInsets.zero,
+                    label: const Text('Предмет'),
+                    inputDecorationTheme: dropdownTheme,
+                    initialSelection: _subject,
+                    enableFilter: true,
+                    dropdownMenuEntries: [for (final s in subjects) DropdownMenuEntry(value: s, label: s)],
+                    onSelected: (v) => setState(() {
+                      _subject = v;
+                      _manualDue = null;
+                      _subgroup = null;
+                    }),
+                  ),
+                  const SizedBox(height: Gap.xl),
+                  const FormLabel('Что задали'),
+                  TextField(
+                    controller: _text,
+                    autofocus: widget.initialSubject != null,
+                    minLines: 3,
+                    maxLines: 6,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(Radii.sm))),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: Gap.xl),
+                  const FormLabel('К какому занятию'),
+                  PillSegments<LessonKind?>(
+                    options: const [(null, 'Любому'), (LessonKind.lecture, 'Лекции'), (LessonKind.practice, 'Практике')],
+                    selected: _kind,
+                    onChanged: (v) => setState(() => _kind = v),
+                  ),
+                  const SizedBox(height: Gap.xl),
+                  DueDateField(
+                    value: due == null ? null : dayTitle(due),
+                    placeholder: _subject == null ? 'Выберите предмет' : 'Занятий не найдено, выберите дату',
+                    hint: _manualDue == null ? 'Подставлено автоматически: ближайшее занятие' : 'Выбрано вручную',
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: due ?? today,
+                        firstDate: today.subtract(const Duration(days: 30)),
+                        lastDate: today.add(const Duration(days: 365)),
+                      );
+                      if (picked != null) setState(() => _manualDue = DateTime.utc(picked.year, picked.month, picked.day));
+                    },
+                  ),
+                  if (ref.watch(isGroupEditorProvider)) ...[
+                    const SizedBox(height: Gap.md),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Для всей группы'),
+                      subtitle: Text(_forGroup
+                          ? 'Увидят все студенты группы во вкладке «Староста». Файлы: до $maxGroupFilesPerHomework шт., каждый до ${maxGroupFileBytes ~/ (1024 * 1024)} МБ'
+                          : 'Вы староста: можно задать ДЗ всем сразу'),
+                      value: _forGroup,
+                      onChanged: (v) => setState(() {
+                        _forGroup = v;
+                        if (!v) _subgroup = null;
+                      }),
                     ),
-                ]),
+                  ],
+                  if (_splits) ...[
+                    const SizedBox(height: Gap.md),
+                    const FormLabel('Для кого ДЗ'),
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      CheckChip(label: 'Всей группе', selected: _subgroup == null, onSelected: (_) => setState(() => _subgroup = null)),
+                      for (final s in data.schedule.subgroups) CheckChip(label: s.label, selected: _subgroup == s.n, onSelected: (_) => setState(() => _subgroup = s.n)),
+                    ]),
+                  ],
+                  const SizedBox(height: Gap.xl),
+                  const FormLabel('Файлы'),
+                  for (final f in _files)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: Gap.sm),
+                      child: FileRow(
+                        attachment: f,
+                        onRemove: () {
+                          ref.read(attachmentStoreProvider).delete(f);
+                          setState(() => _files.remove(f));
+                        },
+                      ),
+                    ),
+                  AttachZone(
+                    count: _files.length,
+                    limitText: 'До $_maxFiles шт., каждый до ${_maxBytes ~/ (1024 * 1024)} МБ',
+                    onPressed: _files.length >= _maxFiles ? null : _attach,
+                  ),
+                ],
               ),
-            Row(children: [
-              OutlinedButton.icon(
-                onPressed: _files.length >= _maxFiles ? null : _attach,
-                icon: const Icon(Icons.attach_file_rounded),
-                label: Text(_files.isEmpty ? 'Прикрепить' : 'Ещё (${_files.length})'),
-              ),
-              const Spacer(),
-              FilledButton(
-                onPressed: canSave && !_busy ? () => _save(due) : null,
-                child: _busy
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5))
-                    : const Text('Добавить'),
-              ),
-            ]),
-          ],
-        ),
+            ),
+          ),
+          SheetActionBar(label: 'Добавить', busy: _busy, onPressed: canSave && !_busy ? () => _save(due) : null),
+        ],
       ),
     );
   }

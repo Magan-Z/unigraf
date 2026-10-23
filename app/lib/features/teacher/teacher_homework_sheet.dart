@@ -17,7 +17,7 @@ import '../../domain/teacher.dart';
 import '../../domain/teacher_homework.dart';
 import '../../teacher_actions.dart';
 import '../../theme/tokens.dart';
-import '../homework/attachment_widgets.dart';
+import '../homework/homework_form_widgets.dart';
 import 'teacher_code_dialog.dart';
 
 /// Открывает окно отправки. [subject] — предмет, если известен (нажатие на пару); [editing] — изменить прежнюю отправку.
@@ -206,129 +206,147 @@ class _TeacherHomeworkSheetState extends ConsumerState<_TeacherHomeworkSheet> {
     final fileCount = _newFiles.length + _keepFiles.length;
     final canSend = subject != null && _text.text.trim().isNotEmpty && due != null && selected.isNotEmpty && !_busy;
 
+    final scheme = theme.colorScheme;
+    final sameKindTargets = selected.length == allowed.length;
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 8, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.editing == null ? 'ДЗ студентам' : 'Изменить ДЗ', style: theme.textTheme.titleLarge),
-            const SizedBox(height: 4),
-            Text('Подпись для студентов: ${session.teacher}', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-            const SizedBox(height: 12),
-            DropdownMenu<String>(
-              key: ValueKey(_subject),
-              expandedInsets: EdgeInsets.zero,
-              label: const Text('Предмет'),
-              initialSelection: _subject,
-              enableFilter: true,
-              dropdownMenuEntries: [for (final s in subjects) DropdownMenuEntry(value: s, label: s)],
-              onSelected: (v) => setState(() {
-                _subject = v;
-                _selected = null;
-                if (widget.editing == null || widget.editing!.subject != v) _manualDue = null;
-              }),
-            ),
-            if (subject != null) ...[
-              const SizedBox(height: 12),
-              Row(children: [
-                Expanded(child: Text('Кому отправить', style: theme.textTheme.labelLarge)),
-                TextButton(
-                  onPressed: allowed.isEmpty ? null : () => setState(() => _selected = selected.length == allowed.length ? <TeacherTarget>{} : allowed.toSet()),
-                  child: Text(selected.length == allowed.length ? 'Снять все' : 'Выбрать все'),
-                ),
-              ]),
-              if (allowed.isEmpty)
-                Text('Для этого предмета нет групп, которым вам разрешена отправка. Напишите автору приложения, чтобы их добавили.',
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error))
-              else
-                Wrap(spacing: 8, runSpacing: 8, children: [
-                  for (final t in allowed)
-                    FilterChip(
-                      label: Text(t.label),
-                      selected: selected.contains(t),
-                      showCheckmark: false,
-                      avatar: selected.contains(t) ? const Icon(Icons.check_rounded, size: 18) : null,
-                      onSelected: (v) => setState(() => _selected = v ? {...selected, t} : ({...selected}..remove(t))),
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.editing == null ? 'ДЗ студентам' : 'Изменить ДЗ', style: theme.textTheme.headlineSmall),
+                  const SizedBox(height: Gap.md),
+                  Row(children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(color: scheme.primary, shape: BoxShape.circle),
+                      child: Text(session.teacher.trim().isEmpty ? '?' : session.teacher.trim().substring(0, 1).toUpperCase(),
+                          style: theme.textTheme.titleMedium?.copyWith(color: scheme.onPrimary, fontWeight: FontWeight.w800)),
                     ),
-                ]),
-              if (blocked.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: Gap.xs),
-                  child: Text('Нет разрешения на отправку: ${blocked.join(', ')}. Напишите автору приложения.',
-                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                ),
-            ],
-            const SizedBox(height: 12),
-            TextField(
-              controller: _text,
-              minLines: 2,
-              maxLines: 6,
-              maxLength: 2000,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Что задать', border: OutlineInputBorder()),
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 4),
-            Wrap(spacing: 8, children: [
-              ChoiceChip(label: const Text('К любому занятию'), selected: _kind == null, onSelected: (_) => setState(() => _kind = null)),
-              ChoiceChip(label: const Text('К лекции'), selected: _kind == LessonKind.lecture, onSelected: (_) => setState(() => _kind = LessonKind.lecture)),
-              ChoiceChip(label: const Text('К практике'), selected: _kind == LessonKind.practice, onSelected: (_) => setState(() => _kind = LessonKind.practice)),
-            ]),
-            const SizedBox(height: 8),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.event_outlined),
-              title: Text(due == null ? (subject == null ? 'Выберите предмет' : 'Занятий не найдено: выберите дату') : 'Срок: ${dayTitle(due)}'),
-              subtitle: Text(_manualDue == null ? 'Подставлено автоматически: ближайшее ваше занятие' : 'Выбрано вручную'),
-              trailing: TextButton(
-                child: const Text('Изменить'),
-                onPressed: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: due ?? today,
-                    firstDate: today.subtract(const Duration(days: 30)),
-                    lastDate: today.add(const Duration(days: 365)),
-                  );
-                  if (picked != null) setState(() => _manualDue = DateTime.utc(picked.year, picked.month, picked.day));
-                },
-              ),
-            ),
-            if (fileCount > 0)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Wrap(spacing: 8, runSpacing: 8, children: [
+                    const SizedBox(width: Gap.md),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(session.teacher, style: theme.textTheme.titleSmall),
+                        Text('Студенты увидят эту подпись', style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                      ]),
+                    ),
+                  ]),
+                  const SizedBox(height: Gap.xl),
+                  DropdownMenu<String>(
+                    key: ValueKey(_subject),
+                    expandedInsets: EdgeInsets.zero,
+                    label: const Text('Предмет'),
+                    inputDecorationTheme: InputDecorationTheme(filled: false, border: OutlineInputBorder(borderRadius: BorderRadius.circular(Radii.sm))),
+                    initialSelection: _subject,
+                    enableFilter: true,
+                    dropdownMenuEntries: [for (final s in subjects) DropdownMenuEntry(value: s, label: s)],
+                    onSelected: (v) => setState(() {
+                      _subject = v;
+                      _selected = null;
+                      if (widget.editing == null || widget.editing!.subject != v) _manualDue = null;
+                    }),
+                  ),
+                  if (subject != null) ...[
+                    const SizedBox(height: Gap.xl),
+                    FormLabel(
+                      'Кому отправить',
+                      trailing: TextButton(
+                        onPressed: allowed.isEmpty ? null : () => setState(() => _selected = sameKindTargets ? <TeacherTarget>{} : allowed.toSet()),
+                        child: Text(sameKindTargets ? 'Снять все' : 'Выбрать все'),
+                      ),
+                    ),
+                    if (allowed.isEmpty)
+                      Text('Для этого предмета нет групп, которым вам разрешена отправка. Напишите автору приложения, чтобы их добавили.',
+                          style: theme.textTheme.bodySmall?.copyWith(color: scheme.error))
+                    else
+                      Wrap(spacing: 8, runSpacing: 8, children: [
+                        for (final t in allowed)
+                          CheckChip(
+                            label: t.label,
+                            selected: selected.contains(t),
+                            onSelected: (v) => setState(() => _selected = v ? {...selected, t} : ({...selected}..remove(t))),
+                          ),
+                      ]),
+                    if (blocked.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: Gap.sm),
+                        child: Text('Нет разрешения на отправку: ${blocked.join(', ')}. Напишите автору приложения.',
+                            style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                      ),
+                  ],
+                  const SizedBox(height: Gap.xl),
+                  const FormLabel('Что задать'),
+                  TextField(
+                    controller: _text,
+                    minLines: 3,
+                    maxLines: 6,
+                    maxLength: 2000,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(Radii.sm))),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: Gap.md),
+                  const FormLabel('К какому занятию'),
+                  PillSegments<LessonKind?>(
+                    options: const [(null, 'Любому'), (LessonKind.lecture, 'Лекции'), (LessonKind.practice, 'Практике')],
+                    selected: _kind,
+                    onChanged: (v) => setState(() => _kind = v),
+                  ),
+                  const SizedBox(height: Gap.xl),
+                  DueDateField(
+                    value: due == null ? null : dayTitle(due),
+                    placeholder: subject == null ? 'Выберите предмет' : 'Занятий не найдено, выберите дату',
+                    hint: _manualDue == null ? 'Подставлено автоматически: ближайшее ваше занятие' : 'Выбрано вручную',
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: due ?? today,
+                        firstDate: today.subtract(const Duration(days: 30)),
+                        lastDate: today.add(const Duration(days: 365)),
+                      );
+                      if (picked != null) setState(() => _manualDue = DateTime.utc(picked.year, picked.month, picked.day));
+                    },
+                  ),
+                  const SizedBox(height: Gap.xl),
+                  const FormLabel('Файлы'),
                   for (final f in _keepFiles)
-                    AttachmentTile(attachment: f.asAttachment, onRemove: () => setState(() => _keepFiles.remove(f))),
+                    Padding(padding: const EdgeInsets.only(bottom: Gap.sm), child: FileRow(attachment: f.asAttachment, onRemove: () => setState(() => _keepFiles.remove(f)))),
                   for (final f in _newFiles)
-                    AttachmentTile(
-                      attachment: f,
-                      onRemove: () {
-                        _store.delete(f);
-                        setState(() => _newFiles.remove(f));
-                      },
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: Gap.sm),
+                      child: FileRow(
+                        attachment: f,
+                        onRemove: () {
+                          _store.delete(f);
+                          setState(() => _newFiles.remove(f));
+                        },
+                      ),
                     ),
-                ]),
+                  AttachZone(
+                    count: fileCount,
+                    limitText: 'До $maxGroupFilesPerHomework шт., каждый до ${maxTeacherFileBytes ~/ (1024 * 1024)} МБ',
+                    onPressed: fileCount >= maxGroupFilesPerHomework || _busy ? null : _attach,
+                  ),
+                ],
               ),
-            Row(children: [
-              OutlinedButton.icon(
-                onPressed: fileCount >= maxGroupFilesPerHomework || _busy ? null : _attach,
-                icon: const Icon(Icons.attach_file_rounded),
-                label: Text(fileCount == 0 ? 'Прикрепить' : 'Ещё ($fileCount)'),
-              ),
-              const Spacer(),
-              FilledButton.icon(
-                onPressed: canSend ? () => _send(due!, selected) : null,
-                icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2.5)) : const Icon(Icons.send_rounded, size: 18),
-                label: Text(widget.editing == null ? 'Отправить' : 'Сохранить'),
-              ),
-            ]),
-            const SizedBox(height: 4),
-            Text('Файлы: до $maxGroupFilesPerHomework шт., каждый до ${maxTeacherFileBytes ~/ (1024 * 1024)} МБ.',
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          ],
-        ),
+            ),
+          ),
+          SheetActionBar(
+            label: widget.editing == null ? 'Отправить' : 'Сохранить',
+            icon: Icons.send_rounded,
+            busy: _busy,
+            onPressed: canSend ? () => _send(due!, selected) : null,
+          ),
+        ],
       ),
     );
   }

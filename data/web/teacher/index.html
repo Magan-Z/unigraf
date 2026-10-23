@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#001A63" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#132C66" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#E9F1FD" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1D3F" media="(prefers-color-scheme: dark)">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
 <!-- Страница ничего не берёт с чужих сайтов: скрипты и стили только с этого сайта, запросы только на сервер UniGraf -->
@@ -35,6 +35,8 @@
   <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 4 2.8 19.5h18.4L12 4Z"/><path d="M12 10v4.5M12 17.2h.01"/></symbol>
 </svg>
 
+<div class="backdrop" aria-hidden="true"></div>
+
 <header class="top">
   <div class="top-in">
     <a class="brand" href="../" aria-label="UniGraf, на главную">
@@ -46,6 +48,19 @@
     <button type="button" id="logout" class="ghost" hidden><svg class="ic" aria-hidden="true"><use href="#i-logout"/></svg>Выйти</button>
   </div>
 </header>
+
+<div class="hero">
+  <div class="hero-in">
+    <div class="hero-text">
+      <p class="hero-title">ДЗ с компьютера</p>
+      <p class="hero-sub">Задание студентам ваших групп и файлы прямо с компьютера в аудитории</p>
+    </div>
+    <picture class="hero-mark" aria-hidden="true">
+      <source media="(prefers-color-scheme: dark)" srcset="../img/unigraf.svg">
+      <img src="../img/unigraf-glyph.svg" alt="" width="220" height="220">
+    </picture>
+  </div>
+</div>
 
 <main>
   <!-- Загрузка -->

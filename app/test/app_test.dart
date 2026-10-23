@@ -139,7 +139,7 @@ void main() {
     await _settle(tester);
     expect(find.text('Новое ДЗ'), findsOneWidget);
     // ЧТК в среду есть каждую неделю (1 нед — лекция, 2 нед — практика) → следующее занятие 14 октября
-    expect(find.textContaining('Срок: среда, 14 октября'), findsOneWidget);
+    expect(find.textContaining('среда, 14 октября'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField).last, 'Прочитать главу 3');
     await tester.pump();
