@@ -4,72 +4,113 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#FBF8F3" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0E1416" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#001A63" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#132C66" media="(prefers-color-scheme: dark)">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
 <!-- Страница ничего не берёт с чужих сайтов: скрипты и стили только с этого сайта, запросы только на сервер UniGraf -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://ktavbvmeohtwzdoptueq.supabase.co; base-uri 'none'; form-action 'none'">
-<title>UniGraf — отправить ДЗ с компьютера</title>
+<title>UniGraf: отправить ДЗ с компьютера</title>
 <link rel="icon" type="image/png" href="../img/favicon.png">
+<link rel="apple-touch-icon" href="../img/apple-touch-icon.png">
+<link rel="preload" href="../fonts/onest.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <noscript><p class="noscript">Для этой страницы нужен JavaScript.</p></noscript>
+
+<!-- Значки: один набор, одна толщина линии -->
+<svg width="0" height="0" class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M4 16v2a2 2 0 0 0 2 2h2M16 4h2a2 2 0 0 1 2 2v2M16 20h2a2 2 0 0 0 2-2v-2M7.5 12h9"/></symbol>
+  <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M7.5 14h9"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M4 16.5v1.5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1.5M12 15V4M7.5 8.5 12 4l4.5 4.5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3.5V8a1 1 0 0 0 1 1h4.5M17 20.5H7a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2h7l5.5 5.5v9.5a2 2 0 0 1-2 2Z"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5.5c0 4.2 2.8 7.4 7 9.5 4.2-2.1 7-5.3 7-9.5V6l-7-3Z"/><path d="m9 12 2.2 2.2L15.2 10"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-2M10 12h11M18 9l3 3-3 3"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.5-3.5M4 4v4h4M4 13a8 8 0 0 0 14.5 3.5M20 20v-4h-4"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 4 2.8 19.5h18.4L12 4Z"/><path d="M12 10v4.5M12 17.2h.01"/></symbol>
+</svg>
+
 <header class="top">
   <div class="top-in">
-    <span class="brand">UniGraf</span>
-    <span class="brand-sub">ДЗ с компьютера</span>
+    <a class="brand" href="../" aria-label="UniGraf, на главную">
+      <img class="brand-mark" src="../img/unigraf.svg" width="40" height="40" alt="">
+      <span class="brand-name">UniGraf</span>
+    </a>
+    <span class="brand-tag">Для преподавателей</span>
     <span class="grow"></span>
-    <button type="button" id="logout" class="link" hidden>Выйти</button>
+    <button type="button" id="logout" class="ghost" hidden><svg class="ic" aria-hidden="true"><use href="#i-logout"/></svg>Выйти</button>
   </div>
 </header>
 
 <main>
   <!-- Загрузка -->
-  <section id="view-boot" class="card center" aria-live="polite"><p>Загрузка…</p></section>
+  <section id="view-boot" class="panel boot" aria-live="polite">
+    <p>Загрузка…</p>
+    <span class="spinner" aria-hidden="true"></span>
+  </section>
 
-  <!-- Вход по QR -->
-  <section id="view-login" class="card" hidden aria-labelledby="login-title">
-    <h1 id="login-title">Вход преподавателя</h1>
-    <p class="lead">Войдите с телефона, на котором в UniGraf включён режим преподавателя. Пароль вводить не нужно, на этом компьютере ничего не сохраняется.</p>
-    <div class="login-grid">
-      <div class="qr-box">
-        <canvas id="qr" width="240" height="240" role="img" aria-label="QR-код для входа"></canvas>
-        <p id="qr-timer" class="muted small" aria-live="off"></p>
-        <button type="button" id="refresh-code" class="btn secondary" hidden>Обновить код</button>
-      </div>
-      <div>
-        <ol class="steps">
-          <li>Откройте UniGraf на телефоне: <b>Настройки → Вход на компьютере</b>.</li>
-          <li>Нажмите «Сканировать QR» и наведите камеру на QR-код на экране.</li>
-          <li>Введите число, которое показано ниже.</li>
-        </ol>
-        <div class="number-box">
-          <span class="muted small">Число для телефона</span>
-          <output id="pair-number" class="number" aria-live="off">····</output>
-        </div>
-        <details class="alt">
-          <summary>Нет камеры? Введите код вручную</summary>
-          <p class="small">В приложении, в том же разделе, введите этот код (число тогда не нужно):</p>
-          <output id="pair-code" class="code">········</output>
-        </details>
-      </div>
+  <!-- Вход: два способа рядом -->
+  <section id="view-login" class="panel" hidden aria-labelledby="login-title">
+    <div class="panel-head">
+      <h1 id="login-title">Войдите с телефона</h1>
+      <p class="lead">Пароль не нужен и на этом компьютере ничего не сохраняется. Нужен телефон, на котором в UniGraf включён режим преподавателя. Выберите один из двух способов.</p>
     </div>
+
+    <div class="methods">
+      <section class="method" aria-labelledby="m-qr">
+        <h2 id="m-qr"><svg class="ic" aria-hidden="true"><use href="#i-scan"/></svg>Сканируйте QR-код</h2>
+        <div class="qr-tile">
+          <canvas id="qr" width="240" height="240" role="img" aria-label="QR-код для входа"></canvas>
+        </div>
+        <p id="qr-timer" class="timer" aria-live="off"></p>
+        <button type="button" id="refresh-code" class="btn soft" hidden><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Обновить код</button>
+        <p class="how">В приложении откройте <b>ДЗ → Вход на компьютере</b>, нажмите «Сканировать QR» и наведите камеру на код. Потом приложение попросит число:</p>
+        <div class="token">
+          <span class="token-cap">Число с экрана, 4 цифры</span>
+          <output id="pair-number" class="token-val number" aria-live="off">····</output>
+        </div>
+      </section>
+
+      <div class="or" aria-hidden="true"><span>или</span></div>
+
+      <section class="method" aria-labelledby="m-code">
+        <h2 id="m-code"><svg class="ic" aria-hidden="true"><use href="#i-keyboard"/></svg>Введите код вручную</h2>
+        <p class="how first">Камера не нужна. В приложении откройте <b>ДЗ → Вход на компьютере</b>, нажмите «Войти по коду» и введите код из 8 знаков.</p>
+        <p class="tip"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Число с экрана здесь не нужно, оно только для способа с QR.</p>
+        <div class="token">
+          <span class="token-cap">Код, 8 знаков</span>
+          <output id="pair-code" class="token-val code">········</output>
+        </div>
+      </section>
+    </div>
+
     <p id="login-error" class="error" role="alert" hidden></p>
-    <p class="muted small">Входите только на компьютере, который открыли сами. Не показывайте код и число другим людям.</p>
+    <p class="safe"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg>Входите только на компьютере, который открыли сами, и не показывайте код и число другим людям.</p>
   </section>
 
   <!-- Форма отправки -->
-  <section id="view-form" class="card" hidden aria-labelledby="form-title">
-    <h1 id="form-title">Отправить ДЗ студентам</h1>
-    <p class="lead">Вы вошли как <b id="who"></b> — студенты увидят эту подпись.</p>
-    <p id="idle-note" class="muted small"></p>
+  <section id="view-form" class="panel" hidden aria-labelledby="form-title">
+    <div class="panel-head">
+      <h1 id="form-title">Отправить ДЗ студентам</h1>
+      <div class="who">
+        <span id="who-initial" class="avatar" aria-hidden="true"></span>
+        <div class="who-text">
+          <b id="who"></b>
+          <span class="muted small">Студенты увидят эту подпись</span>
+        </div>
+        <span class="idle"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg><span id="idle-note"></span></span>
+      </div>
+    </div>
 
     <form id="form" novalidate>
       <div class="field">
         <label for="subject">Предмет</label>
-        <select id="subject" required></select>
+        <div class="select"><select id="subject" required></select></div>
         <p id="no-subjects" class="error small" hidden>В расписании не нашлись ваши пары. Напишите автору приложения, чтобы это исправить.</p>
       </div>
 
@@ -84,17 +125,19 @@
       <div class="field">
         <label for="body">Что задать</label>
         <textarea id="body" rows="5" maxlength="2000" required></textarea>
-        <p class="muted small right"><span id="body-count">0</span> / 2000</p>
+        <p class="counter muted small"><span id="body-count">0</span> / 2000</p>
       </div>
 
       <div class="row">
         <fieldset class="field grow">
           <legend>К какому занятию</legend>
-          <label class="radio"><input type="radio" name="kind" value="" checked> любому</label>
-          <label class="radio"><input type="radio" name="kind" value="lecture"> лекции</label>
-          <label class="radio"><input type="radio" name="kind" value="practice"> практике</label>
+          <div class="seg">
+            <label><input type="radio" name="kind" value="" checked><span>Любому</span></label>
+            <label><input type="radio" name="kind" value="lecture"><span>Лекции</span></label>
+            <label><input type="radio" name="kind" value="practice"><span>Практике</span></label>
+          </div>
         </fieldset>
-        <div class="field">
+        <div class="field due">
           <label for="due">Срок сдачи</label>
           <input type="date" id="due" required>
           <p id="due-hint" class="muted small"></p>
@@ -102,10 +145,11 @@
       </div>
 
       <div class="field">
-        <label for="file-input">Файлы <span class="muted small">до 5 шт., каждый до 15 МБ</span></label>
+        <label for="file-input">Файлы <span class="muted small hint">до 5 шт., каждый до 15 МБ</span></label>
         <div id="drop" class="drop" tabindex="-1">
-          <p>Перетащите файлы сюда или</p>
-          <label class="btn secondary" for="file-input">Выбрать файлы</label>
+          <span class="drop-ic" aria-hidden="true"><svg class="ic"><use href="#i-upload"/></svg></span>
+          <p class="drop-title">Перетащите файлы сюда</p>
+          <label class="btn soft" for="file-input">Выбрать на компьютере</label>
           <input type="file" id="file-input" multiple class="visually-hidden">
         </div>
         <ul id="files" class="files"></ul>
@@ -116,28 +160,32 @@
       <div class="actions">
         <button type="submit" id="send" class="btn" disabled>Отправить</button>
         <span id="send-note" class="muted small"></span>
+        <span class="muted small after">После отправки вход на этом компьютере закроется сам.</span>
       </div>
-      <p class="muted small">После успешной отправки вход на этом компьютере закроется сам.</p>
     </form>
   </section>
 
   <!-- Отправлено -->
-  <section id="view-done" class="card center" hidden aria-live="polite">
+  <section id="view-done" class="panel result" hidden aria-live="polite">
+    <span class="seal ok" aria-hidden="true">
+      <svg viewBox="0 0 64 64"><circle class="seal-ring" cx="32" cy="32" r="29"/><path class="seal-tick" d="m19 33 9 9 17-19"/></svg>
+    </span>
     <h1>Отправлено</h1>
     <p id="done-text" class="lead"></p>
-    <p class="muted">Вход на этом компьютере закрыт. Студенты увидят задание, когда откроют приложение.</p>
+    <p class="note"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg>Вход на этом компьютере закрыт. Студенты увидят задание, когда откроют приложение.</p>
     <p class="muted small">Чтобы отправить ещё одно задание, обновите страницу и войдите снова. Исправить или удалить отправленное можно в приложении на телефоне.</p>
   </section>
 
   <!-- Вход закрыт -->
-  <section id="view-ended" class="card center" hidden aria-live="polite">
+  <section id="view-ended" class="panel result" hidden aria-live="polite">
+    <span class="seal lock" aria-hidden="true"><svg class="ic"><use href="#i-lock"/></svg></span>
     <h1>Вход закрыт</h1>
     <p id="ended-text" class="lead"></p>
     <button type="button" id="relogin" class="btn">Войти снова</button>
   </section>
 </main>
 
-<footer class="foot small muted">На этом компьютере ничего не запоминается: закройте вкладку, и вход закроется.</footer>
+<footer class="foot small muted"><svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg>На этом компьютере ничего не запоминается: закройте вкладку, и вход закроется.</footer>
 
 <script src="qrcode.js"></script>
 <script src="teacher-logic.js"></script>

@@ -84,6 +84,7 @@
 
   function drawQr(text) {
     var canvas = $('qr');
+    canvas.classList.remove('stale');
     var qr = window.qrcode(0, 'M');
     qr.addData(text);
     qr.make();
@@ -112,6 +113,7 @@
     var canvas = $('qr'), ctx = canvas.getContext('2d');
     ctx.fillStyle = '#eee';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+    canvas.classList.add('stale');
     $('pair-number').textContent = '····';
     $('pair-code').textContent = '········';
   }
@@ -183,6 +185,7 @@
     state.session = { token: r.token, teacher: r.teacher, groups: r.groups || [], since: Date.now() };
     state.lastActivity = Date.now();
     $('who').textContent = r.teacher;
+    $('who-initial').textContent = (r.teacher || '?').trim().charAt(0).toUpperCase();
     startWatching();
     show('boot');
     $('view-boot').firstElementChild.textContent = 'Загружаем ваше расписание…';
@@ -320,25 +323,56 @@
     if (problems.length) setError('form-error', problems.join('\n'));
   }
 
+  function icon(id) {
+    var ns = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('class', 'ic');
+    svg.setAttribute('aria-hidden', 'true');
+    var use = document.createElementNS(ns, 'use');
+    use.setAttribute('href', '#' + id);
+    svg.appendChild(use);
+    return svg;
+  }
+
+  function extOf(name) {
+    var i = name.lastIndexOf('.');
+    return i > 0 && i < name.length - 1 ? name.slice(i + 1, i + 5) : '';
+  }
+
   function renderFiles() {
     var ul = $('files');
     ul.textContent = '';
     state.files.forEach(function (f, i) {
       var li = document.createElement('li');
+      var ext = document.createElement('span');
+      ext.className = 'ext';
+      var e = extOf(f.name);
+      if (e) ext.textContent = e; else ext.appendChild(icon('i-file'));
+      li.appendChild(ext);
+      var meta = document.createElement('span');
+      meta.className = 'meta';
       var name = document.createElement('span');
       name.className = 'name';
-      name.textContent = f.name + ' (' + L.formatSize(f.file.size) + ')';
-      li.appendChild(name);
+      name.textContent = f.name;
+      var size = document.createElement('span');
+      size.className = 'size';
+      size.textContent = L.formatSize(f.file.size);
+      meta.appendChild(name);
+      meta.appendChild(size);
+      li.appendChild(meta);
       var rm = document.createElement('button');
-      rm.type = 'button'; rm.className = 'link small'; rm.textContent = 'Убрать'; rm.disabled = state.busy;
+      rm.type = 'button'; rm.className = 'rm'; rm.disabled = state.busy;
+      rm.setAttribute('aria-label', 'Убрать файл ' + f.name);
+      rm.appendChild(icon('i-x'));
       rm.addEventListener('click', function () { state.files.splice(i, 1); renderFiles(); });
       li.appendChild(rm);
       if (state.busy || f.status) {
         var bar = document.createElement('progress');
         bar.max = 100; bar.value = f.reg ? 100 : f.progress;
+        bar.setAttribute('aria-label', 'Загрузка файла ' + f.name);
         li.appendChild(bar);
         var st = document.createElement('span');
-        st.className = 'state' + (f.error ? ' bad' : '');
+        st.className = 'state' + (f.error ? ' bad' : f.reg ? ' good' : '');
         st.textContent = f.error || f.status;
         li.appendChild(st);
       }
@@ -375,6 +409,7 @@
     ['subject', 'body', 'due'].forEach(function (id) { $(id).disabled = busy; });
     Array.prototype.forEach.call(document.querySelectorAll('#groups input, input[name=kind], #toggle-all'), function (el) { el.disabled = busy; });
     $('send').textContent = busy ? 'Отправляем…' : 'Отправить';
+    $('send').classList.toggle('busy', busy);
     renderFiles();
     updateSendState();
   }
@@ -396,9 +431,10 @@
     state.files.forEach(function (f) {
       chain = chain.then(function () {
         if (f.reg) return;
-        f.error = ''; f.status = 'Загружаем…'; f.progress = 0; renderFiles();
+        f.error = ''; f.status = 'Готовим…'; f.progress = 0; renderFiles();
         var id = uuid();
         return ticket().then(function (tk) {
+          f.status = 'Загружаем…'; renderFiles();
           return uploadFile(tk, id, f.file, function (pct) { f.progress = pct; touch(); renderFiles(); }).then(function () {
             f.status = 'Проверяем…'; renderFiles();
             return rpc('register_teacher_file', { p_token: token, p_id: id, p_ticket: tk, p_name: f.name }, { timeout: 30000 });
