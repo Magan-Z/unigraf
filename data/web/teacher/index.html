@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#FBF8F3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1416" media="(prefers-color-scheme: dark)">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<!-- Страница ничего не берёт с чужих сайтов: скрипты и стили только с этого сайта, запросы только на сервер UniGraf -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://ktavbvmeohtwzdoptueq.supabase.co; base-uri 'none'; form-action 'none'">
+<title>UniGraf — отправить ДЗ с компьютера</title>
+<link rel="icon" type="image/png" href="../img/favicon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<noscript><p class="noscript">Для этой страницы нужен JavaScript.</p></noscript>
+<header class="top">
+  <div class="top-in">
+    <span class="brand">UniGraf</span>
+    <span class="brand-sub">ДЗ с компьютера</span>
+    <span class="grow"></span>
+    <button type="button" id="logout" class="link" hidden>Выйти</button>
+  </div>
+</header>
+
+<main>
+  <!-- Загрузка -->
+  <section id="view-boot" class="card center" aria-live="polite"><p>Загрузка…</p></section>
+
+  <!-- Вход по QR -->
+  <section id="view-login" class="card" hidden aria-labelledby="login-title">
+    <h1 id="login-title">Вход преподавателя</h1>
+    <p class="lead">Войдите с телефона, на котором в UniGraf включён режим преподавателя. Пароль вводить не нужно, на этом компьютере ничего не сохраняется.</p>
+    <div class="login-grid">
+      <div class="qr-box">
+        <canvas id="qr" width="240" height="240" role="img" aria-label="QR-код для входа"></canvas>
+        <p id="qr-timer" class="muted small" aria-live="off"></p>
+        <button type="button" id="refresh-code" class="btn secondary" hidden>Обновить код</button>
+      </div>
+      <div>
+        <ol class="steps">
+          <li>Откройте UniGraf на телефоне: <b>Настройки → Вход на компьютере</b>.</li>
+          <li>Нажмите «Сканировать QR» и наведите камеру на QR-код на экране.</li>
+          <li>Введите число, которое показано ниже.</li>
+        </ol>
+        <div class="number-box">
+          <span class="muted small">Число для телефона</span>
+          <output id="pair-number" class="number" aria-live="off">····</output>
+        </div>
+        <details class="alt">
+          <summary>Нет камеры? Введите код вручную</summary>
+          <p class="small">В приложении, в том же разделе, введите этот код (число тогда не нужно):</p>
+          <output id="pair-code" class="code">········</output>
+        </details>
+      </div>
+    </div>
+    <p id="login-error" class="error" role="alert" hidden></p>
+    <p class="muted small">Входите только на компьютере, который открыли сами. Не показывайте код и число другим людям.</p>
+  </section>
+
+  <!-- Форма отправки -->
+  <section id="view-form" class="card" hidden aria-labelledby="form-title">
+    <h1 id="form-title">Отправить ДЗ студентам</h1>
+    <p class="lead">Вы вошли как <b id="who"></b> — студенты увидят эту подпись.</p>
+    <p id="idle-note" class="muted small"></p>
+
+    <form id="form" novalidate>
+      <div class="field">
+        <label for="subject">Предмет</label>
+        <select id="subject" required></select>
+        <p id="no-subjects" class="error small" hidden>В расписании не нашлись ваши пары. Напишите автору приложения, чтобы это исправить.</p>
+      </div>
+
+      <fieldset class="field" id="groups-field">
+        <legend>Кому отправить</legend>
+        <div id="groups" class="chips"></div>
+        <button type="button" id="toggle-all" class="link small">Выбрать все</button>
+        <p id="blocked" class="muted small" hidden></p>
+        <p id="no-groups" class="error small" hidden>Для этого предмета нет групп, которым вам разрешена отправка. Напишите автору приложения, чтобы их добавили.</p>
+      </fieldset>
+
+      <div class="field">
+        <label for="body">Что задать</label>
+        <textarea id="body" rows="5" maxlength="2000" required></textarea>
+        <p class="muted small right"><span id="body-count">0</span> / 2000</p>
+      </div>
+
+      <div class="row">
+        <fieldset class="field grow">
+          <legend>К какому занятию</legend>
+          <label class="radio"><input type="radio" name="kind" value="" checked> любому</label>
+          <label class="radio"><input type="radio" name="kind" value="lecture"> лекции</label>
+          <label class="radio"><input type="radio" name="kind" value="practice"> практике</label>
+        </fieldset>
+        <div class="field">
+          <label for="due">Срок сдачи</label>
+          <input type="date" id="due" required>
+          <p id="due-hint" class="muted small"></p>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="file-input">Файлы <span class="muted small">до 5 шт., каждый до 15 МБ</span></label>
+        <div id="drop" class="drop" tabindex="-1">
+          <p>Перетащите файлы сюда или</p>
+          <label class="btn secondary" for="file-input">Выбрать файлы</label>
+          <input type="file" id="file-input" multiple class="visually-hidden">
+        </div>
+        <ul id="files" class="files"></ul>
+        <p class="muted small">Программы и скрипты (.exe, .apk, .bat, .js и подобные) отправлять нельзя. Файл крупнее 15 МБ лучше дать ссылкой на облако.</p>
+      </div>
+
+      <p id="form-error" class="error" role="alert" hidden></p>
+      <div class="actions">
+        <button type="submit" id="send" class="btn" disabled>Отправить</button>
+        <span id="send-note" class="muted small"></span>
+      </div>
+      <p class="muted small">После успешной отправки вход на этом компьютере закроется сам.</p>
+    </form>
+  </section>
+
+  <!-- Отправлено -->
+  <section id="view-done" class="card center" hidden aria-live="polite">
+    <h1>Отправлено</h1>
+    <p id="done-text" class="lead"></p>
+    <p class="muted">Вход на этом компьютере закрыт. Студенты увидят задание, когда откроют приложение.</p>
+    <p class="muted small">Чтобы отправить ещё одно задание, обновите страницу и войдите снова. Исправить или удалить отправленное можно в приложении на телефоне.</p>
+  </section>
+
+  <!-- Вход закрыт -->
+  <section id="view-ended" class="card center" hidden aria-live="polite">
+    <h1>Вход закрыт</h1>
+    <p id="ended-text" class="lead"></p>
+    <button type="button" id="relogin" class="btn">Войти снова</button>
+  </section>
+</main>
+
+<footer class="foot small muted">На этом компьютере ничего не запоминается: закройте вкладку, и вход закроется.</footer>
+
+<script src="qrcode.js"></script>
+<script src="teacher-logic.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

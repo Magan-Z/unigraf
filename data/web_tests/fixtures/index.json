@@ -1,0 +1,10 @@
+{
+ "weekAnchor": "2026-08-31",
+ "semester": {
+  "id": "2026-autumn",
+  "start": "2026-09-01",
+  "end": "2026-12-26"
+ },
+ "holidays": [],
+ "timezone": "Europe/Moscow"
+}

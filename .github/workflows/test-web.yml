@@ -1,0 +1,19 @@
+# Проверка логики страницы преподавателя (data/web/teacher): подбор предметов и групп, имена, файлы, даты.
+name: Проверка страницы преподавателя
+
+on:
+  push:
+    paths: ["data/web/teacher/**", "data/web_tests/**", ".github/workflows/test-web.yml"]
+  pull_request:
+    paths: ["data/web/teacher/**", "data/web_tests/**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --test data/web_tests/*.test.mjs
+      - run: node --check data/web/teacher/app.js
