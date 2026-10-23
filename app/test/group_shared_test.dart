@@ -170,7 +170,12 @@ void main() {
         ('too_many_attempts', 'Подождите минуту'),
         ('bad_token', 'отозван'),
         ('too_many', 'Слишком много'),
-        ('download_limit', 'Попробуйте завтра'),
+        ('download_limit', 'Попробуйте позже'),
+        ('bad_number', 'Число не подошло'),
+        ('bad_pair', 'Такого входа не найдено'),
+        ('pair_expired', 'устарел'),
+        ('bad_file_type', 'отправлять нельзя'),
+        ('storage_full', 'ссылку на облако'),
       ]) {
         server.failWith = 400;
         server.failMessage = message;

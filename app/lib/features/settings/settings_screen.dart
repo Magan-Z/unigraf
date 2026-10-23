@@ -26,6 +26,7 @@ import '../../domain/teacher.dart';
 import '../../update_check.dart';
 import '../update_banner.dart';
 import '../teacher/teacher_code_dialog.dart';
+import '../teacher/web_login_screen.dart';
 import '../teacher/teacher_picker.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -678,6 +679,12 @@ class _TeacherSection extends ConsumerWidget {
           title: 'Код принят: ${session.teacher}',
           subtitle: 'Групп, которым можно отправлять ДЗ: ${session.groups.length}'
               '${session.groups.isEmpty ? '' : ' (${session.groups.take(4).map((g) => titles[g] ?? g).join(', ')}${session.groups.length > 4 ? '…' : ''})'}',
+        ),
+        _Row(
+          icon: Icons.computer_rounded,
+          title: 'Вход на компьютере',
+          subtitle: 'Отправить ДЗ студентам с компьютера в аудитории: QR или код с экрана',
+          onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const WebLoginScreen())),
         ),
         _Row(
           icon: Icons.logout_rounded,

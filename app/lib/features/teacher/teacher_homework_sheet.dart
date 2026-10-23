@@ -135,7 +135,7 @@ class _TeacherHomeworkSheetState extends ConsumerState<_TeacherHomeworkSheet> {
           skippedMany++;
           continue;
         }
-        if ((p.sizeBytes ?? 0) > maxGroupFileBytes) {
+        if ((p.sizeBytes ?? 0) > maxTeacherFileBytes) {
           skippedBig++;
           continue;
         }
@@ -143,7 +143,7 @@ class _TeacherHomeworkSheetState extends ConsumerState<_TeacherHomeworkSheet> {
         if (!mounted) return;
         setState(() => _newFiles.add(saved));
       }
-      if (skippedBig > 0) _say('Файл больше ${maxGroupFileBytes ~/ (1024 * 1024)} МБ не прикреплён');
+      if (skippedBig > 0) _say('Файл больше ${maxTeacherFileBytes ~/ (1024 * 1024)} МБ не прикреплён');
       if (skippedMany > 0) _say('К одному заданию можно прикрепить не больше $maxGroupFilesPerHomework файлов');
     } catch (_) {
       _say('Не удалось выбрать файл. Проверьте разрешения приложения в настройках телефона.');
@@ -325,7 +325,7 @@ class _TeacherHomeworkSheetState extends ConsumerState<_TeacherHomeworkSheet> {
               ),
             ]),
             const SizedBox(height: 4),
-            Text('Файлы: до $maxGroupFilesPerHomework шт., каждый до ${maxGroupFileBytes ~/ (1024 * 1024)} МБ.',
+            Text('Файлы: до $maxGroupFilesPerHomework шт., каждый до ${maxTeacherFileBytes ~/ (1024 * 1024)} МБ.',
                 style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           ],
         ),

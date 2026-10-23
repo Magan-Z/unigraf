@@ -6,6 +6,9 @@
     <!-- Уведомления (Android 13+ спрашивает у пользователя) и точные напоминания перед парой -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <!-- Камера нужна только для сканирования QR при входе на компьютере (режим преподавателя); камеры может не быть -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application
         android:label="UniGraf"
         android:name="${applicationName}"
