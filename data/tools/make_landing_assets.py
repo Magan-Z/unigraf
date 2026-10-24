@@ -4,7 +4,7 @@
 Порядок:
   1) cd app && flutter test tool/screenshots_test.dart --plain-name landing    → /tmp/claude-shots/landing/*.png
   2) cd data && python tools/make_landing_assets.py
-Файлы появятся в data/web/img, data/web/fonts и data/web/qr.svg. Адрес сайта для QR — в SITE_URL.
+Файлы появятся в data/web/img, data/web/fonts, data/web/qr.svg и data/web/qr-teacher.svg. Адрес сайта для QR — в SITE_URL.
 """
 import os
 import shutil
@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 WEB = ROOT / "data" / "web"
 SHOTS = Path(os.environ.get("LANDING_SHOTS", "/tmp/claude-shots/landing"))
 SITE_URL = "https://magan-z.github.io/unigraf/"
+TEACHER_URL = SITE_URL + "teacher/"  # страница «ДЗ с компьютера» для преподавателей (QR на листовке)
 FONT = ROOT / "app" / "assets" / "fonts" / "Onest.ttf"
 
 PAPER, PETROL, INK, MUTED, AMBER = (251, 248, 243), (0, 26, 99), (26, 32, 34), (85, 98, 106), (242, 169, 59)
@@ -78,6 +79,8 @@ def preview_image() -> None:
 def qr_code() -> None:
     qr = segno.make(SITE_URL, error="m")
     qr.save(WEB / "qr.svg", scale=10, border=4, dark="#001A63", light="#FFFFFF", xmldecl=False, svgns=True, nl=False)
+    teacher = segno.make(TEACHER_URL, error="m")
+    teacher.save(WEB / "qr-teacher.svg", scale=10, border=4, dark="#001A63", light="#FFFFFF", xmldecl=False, svgns=True, nl=False)
 
 
 def web_font() -> None:

@@ -46,6 +46,7 @@
     --band: #001A63;          /* тёмная плашка «без интернета» */
     --band-ink: #E6F0FF;
     --err: #B3261E;
+    --err-ink: #FFFFFF;
     /* Одна шкала скруглений на всей странице: крупные поверхности, кнопки и карточки, мелочь */
     --r-lg: 24px;
     --r-md: 16px;
@@ -72,6 +73,7 @@
       --band: #132C66;
       --band-ink: #D6E6FF;
       --err: #FFB4AB;
+      --err-ink: #690005;
       --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 14px 34px rgba(0, 0, 0, .35);
       --shadow-phone: 0 2px 4px rgba(0, 0, 0, .5), 0 40px 70px -28px rgba(0, 0, 0, .8);
     }
@@ -182,7 +184,7 @@
   .demo { background: var(--surface-2); border-radius: var(--r-lg); padding: 22px; display: grid; gap: 18px; align-content: start; min-height: 17.5rem; }
   .who { display: flex; align-items: center; gap: 12px; min-height: 44px; }
   .who-chip { flex: none; font-weight: 700; font-size: .85rem; padding: 6px 12px; border-radius: 99px; background: var(--petrol); color: var(--petrol-ink); transition: transform .4s var(--ease), background-color .3s; }
-  .who-chip.hot { background: var(--amber); color: var(--amber-ink); transform: scale(1.08); }
+  .who-chip.hot { background: var(--amber); color: #2B1A00; transform: scale(1.08); }
   .who-text { font-weight: 600; transition: opacity .25s; }
   /* Карточка пары в стиле приложения (цвета предмета «Информатика») */
   .tile { --tc: #D6F0EC; --ta: #0E8F86; --to: #144340; position: relative; display: grid; grid-template-columns: 1fr auto; gap: 8px 14px; align-items: center; background: var(--tc); color: var(--to); border-radius: var(--r-md); padding: 16px 16px 16px 18px; box-shadow: 0 0 0 0 transparent; transition: box-shadow .6s var(--ease); }
@@ -194,7 +196,7 @@
   .plate { min-width: 84px; text-align: center; font-weight: 800; font-size: 1.7rem; letter-spacing: -.02em; line-height: 1; padding: 12px 14px; border-radius: var(--r-sm); border: 2.5px solid var(--ta); background: color-mix(in srgb, var(--paper) 78%, transparent); }
   .t-note { grid-column: 1 / -1; display: grid; grid-template-rows: 0fr; transition: grid-template-rows .5s var(--ease); }
   .t-note > div { overflow: hidden; }
-  .t-note span { display: inline-block; margin-top: 4px; font-size: .85rem; font-weight: 700; padding: 4px 10px; border-radius: 99px; background: var(--amber); color: var(--amber-ink); }
+  .t-note span { display: inline-block; margin-top: 4px; font-size: .85rem; font-weight: 700; padding: 4px 10px; border-radius: 99px; background: var(--amber); color: #2B1A00; }
   .tile.changed .t-note { grid-template-rows: 1fr; }
 
   /* Возможности: плитки разного размера, у каждой своя картинка или мини-экран */
@@ -261,7 +263,6 @@
   .steps li:last-child::after { display: none; }
   .steps b { display: block; padding-top: 9px; }
   .steps span { color: var(--muted); font-size: .98rem; }
-  ol.steps.plain-steps { margin-bottom: 20px; }
   .callout { background: var(--amber-soft); color: var(--amber-ink); border-radius: var(--r-md); padding: 16px 18px; margin: 0 0 14px; font-size: .98rem; text-wrap: pretty; }
   .callout b { display: block; margin-bottom: 2px; }
   .callout.calm { background: var(--petrol-soft); color: var(--petrol-soft-ink); }
@@ -277,7 +278,7 @@
   .btn .ok { display: none; }
   .btn.done .ok { display: inline; }
 
-  /* Раскрывающиеся блоки (вопросы и календарь): высота меняется плавно там, где браузер это умеет */
+  /* Раскрывающиеся блоки (вопросы): высота меняется плавно там, где браузер это умеет */
   details { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 0 18px; margin-bottom: 10px; transition: border-color .2s; }
   details[open] { border-color: color-mix(in srgb, var(--petrol) 40%, var(--line)); }
   summary { cursor: pointer; font-weight: 700; padding: 16px 0; list-style: none; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
@@ -292,34 +293,31 @@
     details[open]::details-content { block-size: auto; opacity: 1; }
   }
 
-  /* Календарь без приложения (подписка .ics) */
-  .choices { display: flex; flex-wrap: wrap; gap: 8px; }
-  .choices button { font: inherit; font-size: 15px; min-height: 44px; padding: 8px 14px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); cursor: pointer; transition: transform .2s var(--ease), background-color .2s, border-color .2s; }
-  .choices button:active { transform: scale(.96); }
-  .choices button[aria-pressed="true"] { background: var(--petrol); border-color: var(--petrol); color: var(--petrol-ink); font-weight: 700; }
-  .cal-step { margin: 0 0 16px; }
-  .cal-step:not([hidden]) { animation: paneIn .4s var(--ease) both; }
-  .cal-step h4 { margin: 0 0 8px; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-  .hint { color: var(--muted); font-size: .92rem; margin: 8px 0 0; }
-  .actions { display: grid; gap: 10px; }
-  .actions .btn { flex-direction: row; }
-  .wk-tabs.seg { display: grid; width: 100%; margin: 14px 0 6px; }
-  .wk-tabs.seg button { min-height: 40px; }
-  .day { margin-top: 14px; }
-  .day h5 { font-size: 16px; margin: 0 0 6px; display: flex; align-items: baseline; gap: 8px; }
-  .day h5 .today { font-size: 12px; font-weight: 700; color: var(--petrol); }
-  .lesson { display: grid; grid-template-columns: 64px 1fr auto; gap: 4px 12px; padding: 10px 0; border-top: 1px solid var(--line); align-items: start; }
-  .lesson .time { color: var(--muted); font-size: 14px; }
-  .lesson .time b { display: block; color: var(--ink); font-size: 15px; }
-  .lesson .subject { font-weight: 600; }
-  .lesson .meta { color: var(--muted); font-size: 14px; }
-  .lesson .room { font-size: 20px; font-weight: 800; text-align: right; white-space: nowrap; }
-  .tag { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 6px; padding: 1px 7px; margin-left: 6px; vertical-align: 1px; background: var(--petrol-soft); color: var(--petrol-soft-ink); }
-  .tag.lecture { background: var(--amber-soft); color: var(--amber-ink); }
-  .empty { color: var(--muted); padding: 8px 0; border-top: 1px solid var(--line); }
-  .error { color: var(--err); }
-  ol.plain { padding-left: 22px; margin: 0 0 8px; }
-  ol.plain li { margin-bottom: 6px; }
+  /* Аттестация, зачёт, экзамен: демонстрация и метка, как в приложении */
+  .split.flip > :first-child { order: 0; }
+  .demo .seg { width: 100%; }
+  .demo .seg button { padding: 0 4px; font-size: .88rem; letter-spacing: -.01em; }
+  .t-kind.exam { display: inline-flex; align-items: center; gap: 6px; background: var(--err); color: var(--err-ink); font-weight: 800; padding: 3px 10px 3px 8px; }
+  .t-kind.exam svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .points { list-style: none; padding: 0; margin: 0 0 22px; display: grid; gap: 14px; }
+  .points li { display: flex; align-items: flex-start; gap: 12px; text-wrap: pretty; }
+  .points svg { flex: none; width: 30px; height: 30px; padding: 6px; border-radius: var(--r-sm); background: var(--petrol-soft); color: var(--petrol-soft-ink); stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .points span { padding-top: 3px; }
+
+  /* Преподавателям: отправка ДЗ с компьютера */
+  .teach { background: var(--band); color: var(--band-ink); border-radius: var(--r-lg); padding: 30px 22px; display: grid; gap: 26px; }
+  .teach h2 { color: var(--band-ink); margin: 0; max-width: 19em; }
+  .teach .sub { color: var(--band-ink); opacity: .86; margin: 0; max-width: 40em; }
+  .flow { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; }
+  .flow li { display: grid; grid-template-columns: 44px 1fr; gap: 14px; align-content: start; padding: 18px 0; border-top: 1px solid color-mix(in srgb, var(--band-ink) 24%, transparent); }
+  .flow svg { width: 44px; height: 44px; padding: 10px; border-radius: var(--r-sm); background: color-mix(in srgb, var(--band-ink) 14%, transparent); stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .flow b { display: block; padding-top: 2px; }
+  .flow span { display: block; opacity: .84; font-size: .97rem; text-wrap: pretty; }
+  .teach-cta { display: grid; gap: 12px; justify-items: start; }
+  .btn.light { background: var(--band-ink); color: var(--band); box-shadow: none; flex-direction: row; }
+  .btn.light:focus-visible { outline-color: var(--band-ink); }
+  .teach-cta p { margin: 0; opacity: .86; font-size: .95rem; max-width: 36em; text-wrap: pretty; }
+  .teach-cta a:not(.btn) { color: inherit; }
 
   /* ---------- Подвал ---------- */
   .foot-brand { margin: 0 0 14px; font-size: 17px; }
@@ -331,6 +329,11 @@
   footer .contact { margin: 0 0 8px; }
   footer .contact a { color: var(--petrol); font-weight: 600; text-underline-offset: 3px; }
   footer .btn { flex-direction: row; min-height: 48px; padding: 8px 20px; font-size: 1rem; }
+
+  @media (prefers-color-scheme: dark) {
+    .dock .btn { box-shadow: 0 2px 6px rgba(0, 0, 0, .4), 0 16px 34px rgba(0, 0, 0, .45); }
+    @media (hover: hover) { .btn.primary:hover { box-shadow: 0 2px 4px rgba(0, 0, 0, .4), 0 18px 36px rgba(0, 0, 0, .45); } }
+  }
 
   /* Нижняя кнопка на телефоне: появляется, когда главная кнопка уехала с экрана */
   .dock { position: fixed; z-index: 25; left: 16px; right: 16px; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateY(160%); transition: transform .5s var(--ease); }
@@ -357,7 +360,7 @@
     html { scroll-behavior: auto; }
     h1 em { background-size: 100% 100%; }
     .seg::before, .btn, .phone, .dock, .tile, .t-note { transition-duration: .01ms !important; }
-    .panel:not([hidden]), .find-out [data-pane].on, .cal-step:not([hidden]) { animation: none; }
+    .panel:not([hidden]), .find-out [data-pane].on { animation: none; }
   }
 
   @media (min-width: 720px) {
@@ -365,6 +368,9 @@
     .cell.c-a { grid-column: span 4; } .cell.c-b { grid-column: span 2; }
     .cell.c-c, .cell.c-d, .cell.c-e { grid-column: span 2; }
     .share { grid-template-columns: auto 1fr; gap: 44px; }
+    .teach { padding: 46px 46px 42px; gap: 32px; }
+    .flow { grid-template-columns: repeat(3, 1fr); gap: 32px; }
+    .flow li { grid-template-columns: 1fr; gap: 14px; padding: 22px 0 0; }
     .shots { overflow: visible; justify-content: space-between; margin: 0; padding: 0; }
     .shot { flex: 1 1 0; }
     .shot:nth-child(even) { margin-top: 36px; }
@@ -377,11 +383,10 @@
     .hero { grid-template-columns: 1.3fr .7fr; gap: 56px; padding: 36px 0 64px; min-height: min(720px, calc(100dvh - 64px)); }
     .stage .phone { width: min(300px, 34dvh); }
     .split { grid-template-columns: 1fr 1fr; gap: 56px; }
+    .split.flip > :first-child { order: 2; }
     section { padding: 68px 0; }
   }
   @media (max-width: 380px) {
-    .lesson { grid-template-columns: 54px 1fr; }
-    .lesson .room { grid-column: 2; text-align: left; font-size: 18px; }
     .btn { width: 100%; }
     .seg button { padding: 0 12px; }
   }
@@ -400,6 +405,7 @@
     <nav class="nav" aria-label="Разделы страницы">
       <a href="#screens">Экраны</a>
       <a href="#features">Возможности</a>
+      <a href="#teachers">Преподавателям</a>
       <a href="#install">Установка</a>
       <a href="#faq">Вопросы</a>
     </nav>
@@ -499,6 +505,52 @@
     </div>
   </section>
 
+  <!-- АТТЕСТАЦИЯ, ЗАЧЁТ, ЭКЗАМЕН: живая демонстрация -->
+  <section id="exams" aria-labelledby="h-exams">
+    <div class="split flip">
+      <div>
+        <h2 id="h-exams" class="rv">Объявили аттестацию или экзамен? Староста отметит, и это увидят все</h2>
+        <p class="sub rv" style="--d:1">Зажать пару, выбрать аттестацию, зачёт или экзамен и занятие, на которое он назначен. У студентов пара получит яркую метку, а на Android придёт уведомление, когда приложение проверит обновления.</p>
+        <ul class="points rv" style="--d:2">
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><span>Метка видна на «Сегодня» и в «Неделе», в напоминании перед парой и на виджете.</span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><span>Староста объявляет для своей подгруппы. Для всей группы экзамен добавляют отдельной парой.</span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><span>Отметить аттестацию можно и у себя, если старосты в приложении нет.</span></li>
+        </ul>
+      </div>
+      <div class="demo rv" style="--d:1" id="exam-demo" aria-live="polite">
+        <div class="who"><span class="who-chip" id="exam-chip">По расписанию</span><span class="who-text" id="exam-text">ЧТК и этика, практика</span></div>
+        <div class="tile" id="exam-tile">
+          <div class="t-time">14:40 – 16:10 · 4 пара</div>
+          <div><div class="t-subject">ЧТК и этика</div><span class="t-kind" id="exam-badge">Практика</span></div>
+          <div class="plate">2-15</div>
+          <div class="t-note"><div><span>темы 1–5</span></div></div>
+        </div>
+        <div class="seg" id="exam-seg" role="group" aria-label="Что объявить" style="--n:3;--i:0">
+          <button type="button" data-kind="0" aria-pressed="true">Аттестация</button>
+          <button type="button" data-kind="1" aria-pressed="false">Зачёт</button>
+          <button type="button" data-kind="2" aria-pressed="false">Экзамен</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ПРЕПОДАВАТЕЛЯМ: ДЗ С КОМПЬЮТЕРА -->
+  <section id="teachers" aria-labelledby="h-teachers">
+    <div class="teach">
+      <h2 id="h-teachers" class="rv">Преподаватель отправляет ДЗ прямо с компьютера в аудитории</h2>
+      <p class="sub rv" style="--d:1">Лекция лежит на флешке? Откройте страницу на компьютере, войдите с телефона и отправьте задание с файлами студентам своих групп. Пароль не нужен, на чужом компьютере ничего не остаётся.</p>
+      <ol class="flow">
+        <li class="rv" style="--d:2"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20h7M12 16.5V20"/></svg><div><b>Откройте страницу</b><span>На компьютере в аудитории откройте страницу в браузере и добавьте её в закладки. Устанавливать ничего не нужно.</span></div></li>
+        <li class="rv" style="--d:3"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M4 16v2a2 2 0 0 0 2 2h2M16 4h2a2 2 0 0 1 2 2v2M16 20h2a2 2 0 0 0 2-2v-2M7.5 12h9"/></svg><div><b>Войдите с телефона</b><span>В приложении откройте «ДЗ», нажмите «Отправить ДЗ с компьютера» и наведите камеру на QR-код. Камеры нет: введите код из 8 знаков.</span></div></li>
+        <li class="rv" style="--d:4"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.5v1.5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1.5M12 15V4M7.5 8.5 12 4l4.5 4.5"/></svg><div><b>Отправьте задание</b><span>Выберите предмет и группы, прикрепите до 5 файлов по 15 МБ. После отправки вход на компьютере закроется сам.</span></div></li>
+      </ol>
+      <div class="teach-cta rv" style="--d:5">
+        <a class="btn light" href="teacher/" data-shared>Открыть страницу для преподавателей</a>
+        <p>Нужен режим преподавателя в приложении и код преподавателя. Как его получить, написано в <a href="#faq">вопросах</a>.</p>
+      </div>
+    </div>
+  </section>
+
   <!-- ВОЗМОЖНОСТИ -->
   <section id="features" aria-labelledby="h-features">
     <h2 id="h-features" class="rv">Всё, о чём вы спрашиваете в чате группы</h2>
@@ -579,7 +631,7 @@
         <li><div><b>Выберите «На экран „Домой“»</b><span>Потом «Добавить». На экране появится значок приложения.</span></div></li>
         <li><div><b>Запускайте с главного экрана</b><span>Приложение откроется без адресной строки, как обычное. Выберите группу и подгруппу.</span></div></li>
       </ol>
-      <div class="callout"><b>Чего нет на iPhone</b>Виджетов и напоминаний о парах: их запрещает платформа для сайтов. Всё остальное, включая домашку с файлами и замены от старосты, работает. Напоминания можно получить через <a href="#calendar">календарь</a>.</div>
+      <div class="callout"><b>Чего нет на iPhone</b>Виджетов и напоминаний о парах: их запрещает платформа для сайтов. Всё остальное, включая домашку с файлами и замены от старосты, работает.</div>
       <a class="btn primary" href="app/" data-shared style="display:inline-flex">Открыть на iPhone</a>
     </div>
   </section>
@@ -600,55 +652,6 @@
         <p class="copied" id="copied" role="status"></p>
       </div>
     </div>
-  </section>
-
-  <!-- КАЛЕНДАРЬ БЕЗ ПРИЛОЖЕНИЯ -->
-  <section id="calendar" aria-labelledby="h-calendar">
-    <h2 id="h-calendar" class="rv">Не хотите ставить приложение? Подключите календарь</h2>
-    <p class="sub">Календарь — это программа, которая уже есть в вашем телефоне: «Календарь» на iPhone и «Google Календарь» на Android. Выберите свою группу, и все пары появятся в нём сами, с временем и аудиторией. Когда расписание изменится, пары в календаре обновятся тоже.</p>
-    <ol class="steps">
-      <li><div><b>Выберите группу</b><span>Нажмите кнопку ниже и укажите форму обучения, курс, группу и подгруппу.</span></div></li>
-      <li><div><b>Нажмите «Добавить в календарь»</b><span>Телефон спросит, подписаться ли на расписание. Согласитесь.</span></div></li>
-      <li><div><b>Откройте «Календарь»</b><span>Пары уже там. Можно добавить виджет календаря на главный экран.</span></div></li>
-    </ol>
-    <div class="callout calm"><b>Чего в календаре не будет</b>Только пары. Домашки, замен от старосты, поиска преподавателей и виджетов приложения в нём нет: для этого нужно приложение. Новое расписание в календаре появляется не мгновенно, а в течение нескольких часов.</div>
-    <details id="cal-details">
-      <summary>Выбрать группу и подключить календарь</summary>
-      <div id="loading" style="padding-bottom:14px">Загружаю расписание…</div>
-      <div id="app" hidden>
-        <div class="cal-step" id="step-form"><h4>Форма обучения</h4><div class="choices" id="forms"></div></div>
-        <div class="cal-step" id="step-course" hidden><h4>Курс</h4><div class="choices" id="courses"></div></div>
-        <div class="cal-step" id="step-group" hidden><h4>Группа</h4><div class="choices" id="groups"></div></div>
-        <div class="cal-step" id="step-subgroup" hidden>
-          <h4>Подгруппа</h4><div class="choices" id="subgroups"></div>
-          <p class="hint">Подгруппа 1 — левый столбец группы в таблице расписания.</p>
-        </div>
-        <div class="cal-step" id="step-pe" hidden>
-          <h4>Физкультура</h4><div class="choices" id="pe"></div>
-          <p class="hint">У вашей группы физкультура отдельно у юношей и у девушек.</p>
-        </div>
-        <div id="result" hidden>
-          <div class="actions" style="margin-bottom:8px">
-            <a class="btn primary" id="btn-ics-ios" href="#">Добавить в календарь iPhone</a>
-            <a class="btn soft" id="btn-google" href="#" target="_blank" rel="noopener">Добавить в Google Календарь (Android)</a>
-          </div>
-          <p class="hint">На iPhone нажмите первую кнопку, на Android — вторую.</p>
-          <h3 id="table-title" style="margin-top:22px">Расписание</h3>
-          <div class="wk-tabs seg" role="tablist" style="--n:2;--i:0">
-            <button role="tab" id="tab-1" aria-selected="true" data-week="1">1 неделя</button>
-            <button role="tab" id="tab-2" aria-selected="false" data-week="2">2 неделя</button>
-          </div>
-          <div id="week-table"></div>
-          <h3 style="margin-top:26px">Виджет на экране iPhone</h3>
-          <ol class="plain">
-            <li>Нажмите «Добавить в Календарь iPhone» выше и подтвердите <b>«Подписаться»</b> → <b>«Добавить»</b>.</li>
-            <li>На экране «Домой» нажмите и подержите пустое место, пока значки не начнут покачиваться.</li>
-            <li>Нажмите <b>＋</b> в левом верхнем углу → найдите <b>«Календарь»</b> → выберите виджет «Следующее событие» или «Список».</li>
-          </ol>
-          <p class="hint">Если пары не появились: Настройки → Календарь → Учётные записи → Подписные календари — проверьте, что подписка там есть.</p>
-        </div>
-      </div>
-    </details>
   </section>
 
   <!-- ВОПРОСЫ -->
@@ -685,8 +688,16 @@
       <p>Режим преподавателя показывает ваши пары по всем группам: при первом запуске выберите «Я преподаватель» и найдите себя в списке. Лекции для нескольких групп собраны в одну пару, вместо фамилии на карточке указаны группы. Чтобы отправлять домашние задания студентам своих групп, нужен код преподавателя: его выдаёт автор приложения. Напишите на <a href="mailto:unigraf95@gmail.com?subject=Код%20преподавателя">unigraf95@gmail.com</a>: укажите фамилию, имя, отчество и группы, которым вы преподаёте.</p>
     </details>
     <details class="rv" style="--d:5">
+      <summary>Как преподавателю отправить ДЗ с компьютера?</summary>
+      <p>Откройте <a href="teacher/" data-shared>страницу для преподавателей</a> на компьютере. В приложении в режиме преподавателя на вкладке «ДЗ» нажмите «Отправить ДЗ с компьютера» и отсканируйте QR-код или введите код из 8 знаков. Потом выберите предмет и группы, напишите задание и прикрепите файлы (до 5 штук, каждый до 15 МБ). После отправки вход на компьютере закрывается сам, на компьютере ничего не запоминается. Исправить или удалить отправленное можно в приложении.</p>
+    </details>
+    <details class="rv" style="--d:5">
+      <summary>Как объявить аттестацию, зачёт или экзамен?</summary>
+      <p>Староста группы зажимает пару на экране «Сегодня» и выбирает «Объявить аттестацию, зачёт или экзамен». Приложение предложит ближайшее занятие этого предмета, можно выбрать другое и дописать заметку. Объявление увидит подгруппа старосты. Для всей группы экзамен добавляют отдельной парой: «Мои правки» → «Добавить пару» с переключателем «Для всей группы». Студент может отметить аттестацию и у себя.</p>
+    </details>
+    <details class="rv" style="--d:5">
       <summary>Чем отличается iPhone от Android?</summary>
-      <p>На iPhone приложение открывается из браузера и закрепляется на экране «Домой». В нём есть всё, кроме виджетов и напоминаний о парах: их для сайтов запрещает платформа. Для напоминаний подпишитесь на календарь.</p>
+      <p>На iPhone приложение открывается из браузера и закрепляется на экране «Домой». В нём есть всё, кроме виджетов и напоминаний о парах: их для сайтов запрещает платформа.</p>
     </details>
     <details class="rv" style="--d:6">
       <summary>Нашёл ошибку или есть идея. Куда писать?</summary>
@@ -713,16 +724,10 @@ const PAGE_URL = "https://magan-z.github.io/unigraf/";
 // Корень сайта: на основной странице пусто; на тестовой (/site-next/) публикация ставит «../» (приложение, APK и расписание лежат на основном сайте)
 const ROOT = (document.querySelector('meta[name="site-root"]') || {}).content || "";
 document.querySelectorAll("a[data-shared]").forEach((a) => { if (ROOT) a.setAttribute("href", ROOT + a.getAttribute("href")); });
-const state = { index: null, form: null, course: null, group: null, subgroup: null, pe: null, week: 1, groupData: null };
 
 // ---------- Время (Москва, UTC+3) ----------
 function moscowNow() { return new Date(Date.now() + 3 * 3600 * 1000); }
 function moscowToday() { const n = moscowNow(); return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate())); }
-function weekNumber(day, anchorIso) {
-  const anchor = new Date(anchorIso + "T00:00:00Z");
-  const days = Math.round((day - anchor) / 86400000);
-  return ((Math.floor(days / 7) % 2) + 2) % 2 + 1;
-}
 
 // ---------- Платформа: подсвечиваем нужную кнопку ----------
 function detectOs() {
@@ -816,167 +821,8 @@ if (navigator.share) {
   });
 }
 
-// ---------- Календарь без приложения (подписка .ics) ----------
-const WEEKDAYS = ["", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"];
-const KIND_TITLES = { lecture: "Лекция", practice: "Практика", pe: "Физ-ра", curator: "Кураторский" };
-const STORAGE_KEY = "unigraf.choice";
-function saveChoice() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ form: state.form, course: state.course, group: state.group, subgroup: state.subgroup, pe: state.pe })); } catch (e) { /* приватный режим */ }
-}
-function loadChoice() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "null"); } catch (e) { return null; } }
-function renderChoices(containerId, items, selected, onPick) {
-  const box = $(containerId);
-  box.replaceChildren();
-  for (const item of items) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = item.label;
-    b.setAttribute("aria-pressed", String(item.value === selected));
-    b.addEventListener("click", () => onPick(item.value));
-    box.append(b);
-  }
-}
-function currentForm() { return state.index.forms.find((f) => f.code === state.form); }
-function currentGroup() { const form = currentForm(); return form && form.groups.find((g) => g.id === state.group); }
-function render() {
-  const forms = state.index.forms;
-  renderChoices("forms", forms.map((f) => ({ value: f.code, label: f.title })), state.form, (v) => { state.form = v; state.course = state.group = state.subgroup = state.pe = null; update(); });
-  const form = currentForm();
-  $("step-course").hidden = !form;
-  if (!form) return finish(false);
-  const courses = [...new Set(form.groups.map((g) => g.course))].sort((a, b) => a - b);
-  if (courses.length === 1) state.course = courses[0];
-  renderChoices("courses", courses.map((c) => ({ value: c, label: c + " курс" })), state.course, (v) => { state.course = v; state.group = state.subgroup = state.pe = null; update(); });
-  $("step-group").hidden = state.course == null;
-  if (state.course == null) return finish(false);
-  const groups = form.groups.filter((g) => g.course === state.course);
-  renderChoices("groups", groups.map((g) => ({ value: g.id, label: g.title })), state.group, (v) => { state.group = v; state.subgroup = state.pe = null; update(); });
-  const group = currentGroup();
-  $("step-subgroup").hidden = !group || group.subgroups.length < 2;
-  if (!group) return finish(false);
-  if (group.subgroups.length === 1) state.subgroup = 1;
-  renderChoices("subgroups", group.subgroups.map((s) => ({ value: s.n, label: s.label })), state.subgroup, (v) => { state.subgroup = v; update(); });
-  if (state.subgroup == null) return finish(false);
-  $("step-pe").hidden = !group.hasGenderedPe;
-  if (group.hasGenderedPe) {
-    renderChoices("pe", [{ value: "m", label: "Юноши" }, { value: "f", label: "Девушки" }, { value: "both", label: "Показывать обе" }], state.pe, (v) => { state.pe = v; update(); });
-    if (state.pe == null) return finish(false);
-  } else { state.pe = null; }
-  finish(true);
-}
-function finish(ready) { $("result").hidden = !ready; if (ready) showResult(); }
-function update() { saveChoice(); render(); }
-function calendarFileName(group) {
-  const suffix = state.pe === "m" || state.pe === "f" ? "-" + state.pe : "";
-  return `${group.id}-${state.subgroup}${suffix}.ics`;
-}
-async function showResult() {
-  const group = currentGroup();
-  const icsUrl = new URL(ROOT + "ics/" + calendarFileName(group), location.href);
-  const webcal = icsUrl.href.replace(/^https?:/, "webcal:");
-  $("btn-ics-ios").href = webcal;
-  $("btn-google").href = "https://calendar.google.com/calendar/r?cid=" + encodeURIComponent(webcal);
-  const subgroupLabel = group.subgroups.length > 1 ? " · " + group.subgroups[state.subgroup - 1].label : "";
-  $("table-title").textContent = "Расписание · " + group.title + subgroupLabel;
-  if (!state.groupData || state.groupData.group.id !== group.id) {
-    $("week-table").textContent = "Загружаю…";
-    try {
-      const response = await fetch(ROOT + "groups/" + group.id + ".json", { cache: "no-cache" });
-      state.groupData = await response.json();
-    } catch (e) {
-      $("week-table").innerHTML = '<p class="error">Не удалось загрузить расписание группы. Обновите страницу.</p>';
-      return;
-    }
-  }
-  renderWeek();
-}
-function lessonVisible(lesson) {
-  if (!lesson.subgroups.includes(state.subgroup)) return false;
-  if (state.pe === "m" && lesson.tags.includes("female")) return false;
-  if (state.pe === "f" && lesson.tags.includes("male")) return false;
-  return true;
-}
-function renderWeek() {
-  for (const n of [1, 2]) $("tab-" + n).setAttribute("aria-selected", String(state.week === n));
-  document.querySelector(".wk-tabs").style.setProperty("--i", state.week - 1);
-  const bells = state.index.bells;
-  const today = moscowToday();
-  const isCurrentWeek = weekNumber(today, state.index.weekAnchor) === state.week;
-  const todayWeekday = today.getUTCDay();
-  const box = $("week-table");
-  box.replaceChildren();
-  for (let weekday = 1; weekday <= 6; weekday++) {
-    const lessons = state.groupData.lessons
-      .filter((l) => l.weekday === weekday && (l.week === 0 || l.week === state.week) && lessonVisible(l))
-      .sort((a, b) => a.pair - b.pair);
-    if (!lessons.length && weekday === 6) continue;
-    const day = document.createElement("div");
-    day.className = "day";
-    const h = document.createElement("h5");
-    h.textContent = WEEKDAYS[weekday];
-    if (isCurrentWeek && weekday === todayWeekday) {
-      const t = document.createElement("span");
-      t.className = "today";
-      t.textContent = "сегодня";
-      h.append(t);
-    }
-    day.append(h);
-    if (!lessons.length) {
-      const e = document.createElement("div");
-      e.className = "empty";
-      e.textContent = "Пар нет";
-      day.append(e);
-    }
-    for (const l of lessons) {
-      const [start, end] = bells[l.pair - 1];
-      const row = document.createElement("div");
-      row.className = "lesson";
-      row.innerHTML = `<div class="time"><b>${start}</b>${end}</div><div><div class="subject"></div><div class="meta"></div></div><div class="room"></div>`;
-      const subject = row.querySelector(".subject");
-      subject.textContent = l.subject;
-      const tag = document.createElement("span");
-      tag.className = "tag " + l.kind;
-      tag.textContent = KIND_TITLES[l.kind] || l.kind;
-      subject.append(tag);
-      row.querySelector(".meta").textContent = [l.teacher, l.pair + " пара"].filter(Boolean).join(" · ");
-      row.querySelector(".room").textContent = l.room || "";
-      day.append(row);
-    }
-    box.append(day);
-  }
-}
-for (const n of [1, 2]) $("tab-" + n).addEventListener("click", () => { state.week = n; renderWeek(); });
-
-async function startCalendar() {
-  try {
-    const response = await fetch(ROOT + "index.json", { cache: "no-cache" });
-    state.index = await response.json();
-  } catch (e) {
-    $("loading").innerHTML = '<p class="error">Не удалось загрузить расписание. Проверьте интернет и обновите страницу.</p>';
-    return;
-  }
-  state.week = weekNumber(moscowToday(), state.index.weekAnchor);
-  const saved = loadChoice();
-  if (saved) Object.assign(state, saved);
-  if (state.group && !currentGroup()) Object.assign(state, { form: null, course: null, group: null, subgroup: null, pe: null });
-  const updated = state.index.version.slice(0, 10).split("-").reverse().join(".");
-  $("footer-date").textContent = "Расписание обновлено " + updated + ". Студенческий проект, расписание берётся из официального файла института.";
-  $("loading").hidden = true;
-  $("app").hidden = false;
-  render();
-}
-
-// Переход по ссылке «#calendar» открывает блок с подпиской
-function openCalendarIfLinked() {
-  if (location.hash === "#calendar") $("cal-details").open = true;
-}
-window.addEventListener("hashchange", openCalendarIfLinked);
-document.querySelectorAll('a[href="#calendar"]').forEach((a) => a.addEventListener("click", () => { $("cal-details").open = true; }));
-
 setupPlatform();
-openCalendarIfLinked();
 loadRelease();
-startCalendar();
 
 // =====================================================================
 //  Оформление и движение (всё необязательное: без скриптов страница просто читается)
@@ -1025,12 +871,12 @@ if ("IntersectionObserver" in window) {
 })();
 
 // ---------- Появление при прокрутке: один раз, с небольшой задержкой по порядку ----------
-const onShown = { demo: () => demoPlay(), hw: () => setTimeout(() => $("hw-1").classList.add("done"), 700), days: () => animateDays() };
+const onShown = { demo: () => demoPlay(), "exam-demo": () => examPlay(), hw: () => setTimeout(() => $("hw-1").classList.add("done"), 700), days: () => animateDays() };
 (function reveal() {
   const items = document.querySelectorAll(".rv, #bells");
   if (!("IntersectionObserver" in window) || REDUCED) {
     items.forEach((el) => el.classList.add("in"));
-    if (REDUCED) { setTimeout(() => { demoFinal(); $("hw-1").classList.add("done"); }, 0); }
+    if (REDUCED) { setTimeout(() => { demoFinal(); examFinal(); $("hw-1").classList.add("done"); }, 0); }
     return;
   }
   const io = new IntersectionObserver((entries) => {
@@ -1097,6 +943,61 @@ function demoPlay() {
   at(3900, () => { $("tile").classList.remove("glow"); $("who-chip").classList.remove("hot"); $("who-chip").textContent = "Готово"; $("who-text").textContent = "У всей группы пара уже в аудитории 3-12"; });
 }
 $("demo-replay").addEventListener("click", demoPlay);
+
+// ---------- Демонстрация: староста объявляет аттестацию, зачёт или экзамен ----------
+const EXAM_KINDS = [
+  { title: "Аттестация", verb: "аттестацию" },
+  { title: "Зачёт", verb: "зачёт" },
+  { title: "Экзамен", verb: "экзамен" },
+];
+const EXAM_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-13a1 1 0 0 1 1-1Z"/><path d="m8 12.5 2.8 2.8L16 9.5"/></svg>';
+const examTimers = [];
+let examKind = 0;
+function examReset() {
+  examTimers.splice(0).forEach(clearTimeout);
+  $("exam-tile").classList.remove("changed", "glow");
+  $("exam-chip").classList.remove("hot");
+  $("exam-chip").textContent = "По расписанию";
+  $("exam-text").textContent = "ЧТК и этика, практика";
+  $("exam-badge").className = "t-kind";
+  $("exam-badge").textContent = "Практика";
+}
+function examFinal() {
+  const k = EXAM_KINDS[examKind];
+  $("exam-badge").className = "t-kind exam";
+  $("exam-badge").innerHTML = EXAM_ICON + k.title;
+  $("exam-chip").textContent = "Готово";
+  $("exam-text").textContent = "У подгруппы пара с меткой «" + k.title + "»";
+  $("exam-tile").classList.add("changed");
+}
+function examPlay() {
+  examReset();
+  if (REDUCED) { examFinal(); return; }
+  const k = EXAM_KINDS[examKind];
+  const at = (ms, fn) => examTimers.push(setTimeout(fn, ms));
+  at(700, () => { $("exam-chip").textContent = "Староста"; $("exam-chip").classList.add("hot"); $("exam-text").textContent = "Объявляет " + k.verb; });
+  at(1800, () => {
+    const badge = $("exam-badge");
+    badge.animate([{ transform: "scale(1)" }, { transform: "scale(.6)", opacity: 0 }], { duration: 180, easing: "ease-in", fill: "forwards" });
+    examTimers.push(setTimeout(() => {
+      badge.getAnimations().forEach((a) => a.cancel());
+      badge.className = "t-kind exam";
+      badge.innerHTML = EXAM_ICON + k.title;
+      badge.animate([{ transform: "scale(.6)", opacity: 0 }, { transform: "scale(1)", opacity: 1 }], { duration: 520, easing: EASE_OUT });
+      $("exam-tile").classList.add("glow", "changed");
+    }, 180));
+  });
+  at(3600, () => { $("exam-tile").classList.remove("glow"); examFinal(); });
+}
+(function examSeg() {
+  const seg = $("exam-seg");
+  seg.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+    examKind = Number(b.dataset.kind);
+    seg.style.setProperty("--i", examKind);
+    seg.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    examPlay();
+  }));
+})();
 
 // ---------- Мини-поиск в карточке «Где преподаватель» ----------
 (function findDemo() {

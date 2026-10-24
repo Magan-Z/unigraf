@@ -14,26 +14,37 @@
   .bar a { color: var(--petrol); }
   .bar button { font: inherit; font-weight: 700; background: var(--petrol); color: #fff; border: 0; border-radius: 12px; padding: 12px 20px; cursor: pointer; }
   /* Лист A4: на экране показан в уменьшенном виде, при печати занимает всю страницу */
-  .sheet { width: 210mm; min-height: 297mm; margin: 16px auto; background: #FBF8F3; padding: 18mm 16mm; display: flex; flex-direction: column; align-items: center; text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,.18); }
+  .sheet { width: 210mm; min-height: 297mm; margin: 16px auto; background: #FBF8F3; padding: 13mm 16mm 11mm; display: flex; flex-direction: column; align-items: center; text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,.18); }
   .logo { display: flex; align-items: center; gap: 12px; font-weight: 800; font-size: 26px; color: var(--petrol); }
   .logo img { width: 56px; height: 56px; border-radius: 16px; }
-  h1 { font-size: 46px; line-height: 1.05; letter-spacing: -.03em; font-weight: 800; margin: 14mm 0 6mm; }
+  h1 { text-wrap: balance; font-size: 46px; line-height: 1.05; letter-spacing: -.03em; font-weight: 800; margin: 8mm 0 4mm; }
   h1 span { background: linear-gradient(transparent 62%, #FFE7BF 62% 92%, transparent 92%); }
-  .lead { font-size: 22px; color: var(--muted); max-width: 150mm; margin: 0 0 10mm; }
-  .qr { background: #fff; padding: 6mm; border-radius: 8mm; border: 2px solid var(--soft); }
-  .qr img { display: block; width: 88mm; height: 88mm; }
-  .scan { font-size: 22px; font-weight: 700; margin: 6mm 0 2mm; }
+  .lead { font-size: 21px; color: var(--muted); max-width: 150mm; margin: 0 0 9mm; }
+  /* Средний ряд: код слева, подсказка и список справа */
+  .main { display: flex; align-items: center; gap: 12mm; text-align: left; }
+  .qr { background: #fff; padding: 5mm; border-radius: 7mm; border: 2px solid var(--soft); flex: none; }
+  .qr img { display: block; width: 70mm; height: 70mm; }
+  .scan { font-size: 22px; font-weight: 700; margin: 0 0 2mm; }
   .url { font-size: 20px; color: var(--petrol); font-weight: 700; word-break: break-all; }
-  ul { list-style: none; padding: 0; margin: 10mm 0 0; display: grid; gap: 4mm; font-size: 22px; text-align: left; }
-  li::before { content: "✓"; color: var(--petrol); font-weight: 800; margin-right: 8px; }
-  .foot { margin-top: auto; padding-top: 10mm; font-size: 14px; color: var(--muted); }
+  ul { list-style: none; padding: 0; margin: 7mm 0 0; display: grid; gap: 3mm; font-size: 20px; text-align: left; }
+  li { display: flex; gap: 8px; }
+  li::before { content: "✓"; color: var(--petrol); font-weight: 800; flex: none; }
+  /* Преподавателям: отправка ДЗ с компьютера */
+  .teachers { width: 100%; margin-top: 9mm; display: flex; align-items: center; justify-content: space-between; gap: 10mm; text-align: left; background: var(--petrol); color: #E6F0FF; border-radius: 8mm; padding: 8mm 9mm; }
+  .teachers h2 { margin: 0 0 2mm; font-size: 28px; line-height: 1.1; letter-spacing: -.02em; color: #fff; }
+  .teachers p { margin: 0 0 3mm; font-size: 17px; line-height: 1.4; max-width: 105mm; }
+  .teachers .url { color: #fff; font-size: 17px; }
+  .teachers .qr { padding: 3mm; border-radius: 5mm; border: 0; text-align: center; }
+  .teachers .qr img { width: 40mm; height: 40mm; }
+  .foot { margin-top: auto; padding-top: 7mm; font-size: 14px; color: var(--muted); }
+  .sheet, .teachers { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   @page { size: A4; margin: 0; }
   @media print {
     body { background: #FBF8F3; }
     .bar { display: none; }
     .sheet { margin: 0; box-shadow: none; width: 100%; min-height: 100vh; }
   }
-  @media (max-width: 800px) { .sheet { width: calc(100% - 24px); padding: 22px 14px; min-height: 0; } h1 { font-size: 34px; } .qr img { width: min(80vw, 88mm); height: auto; } }
+  @media screen and (max-width: 800px) { .sheet { width: calc(100% - 24px); padding: 22px 14px; min-height: 0; } h1 { font-size: 34px; } .main { flex-direction: column; text-align: center; } .qr img { width: min(60vw, 74mm); height: auto; } .teachers { flex-direction: column; text-align: center; } .teachers .qr img { width: min(46vw, 40mm); } ul { justify-self: center; } }
 </style>
 </head>
 <body>
@@ -43,16 +54,29 @@
 </div>
 <div class="sheet">
   <div class="logo"><img src="img/Icon-192.png" alt="" width="56" height="56">UniGraf</div>
-  <h1>Пары, аудитории и домашка <span>в телефоне</span></h1>
+  <h1>Пары, аудитории и домашка <span>в&nbsp;телефоне</span></h1>
   <p class="lead">Приложение для студентов ИМФИТ. Android и iPhone. Бесплатно, без регистрации, работает без интернета.</p>
-  <div class="qr"><img src="qr.svg" alt="QR-код со ссылкой на страницу приложения"></div>
-  <p class="scan">Наведите камеру телефона на код</p>
-  <div class="url">magan-z.github.io/unigraf</div>
-  <ul>
-    <li>Расписание вашей группы и подгруппы</li>
-    <li>Домашка и файлы от старосты</li>
-    <li>Поиск преподавателей и свободных аудиторий</li>
-  </ul>
+  <div class="main">
+    <div class="qr"><img src="qr.svg" alt="QR-код со ссылкой на страницу приложения"></div>
+    <div>
+      <p class="scan">Наведите камеру телефона на код</p>
+      <div class="url">magan-z.github.io/unigraf</div>
+      <ul>
+        <li>Расписание вашей группы и подгруппы</li>
+        <li>Домашка и файлы от старосты и преподавателей</li>
+        <li>Аттестации, зачёты и экзамены в расписании</li>
+        <li>Поиск преподавателей и свободных аудиторий</li>
+      </ul>
+    </div>
+  </div>
+  <div class="teachers">
+    <div>
+      <h2>Преподавателям</h2>
+      <p>Отправляйте домашнее задание с файлами студентам прямо с компьютера в аудитории. Вход по QR-коду с телефона, пароль не нужен.</p>
+      <div class="url">magan-z.github.io/unigraf/teacher</div>
+    </div>
+    <div class="qr"><img src="qr-teacher.svg" alt="QR-код со ссылкой на страницу для преподавателей"></div>
+  </div>
   <div class="foot">Студенческий проект. Расписание берётся из официального файла института.</div>
 </div>
 </body>
