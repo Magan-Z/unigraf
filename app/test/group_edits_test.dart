@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:unigraf/domain/group_shared.dart';
 import 'package:unigraf/domain/models.dart';
 import 'package:unigraf/domain/pair_suggestions.dart';
+import 'package:unigraf/domain/schedule_resolver.dart';
+import 'package:unigraf/domain/week_view.dart';
 
 GroupOverrideRow _row(
   String id, {
@@ -135,6 +137,76 @@ void main() {
       final add = Override(date: parseDay('2026-10-26'), pair: 2, type: OverrideType.add, subject: 'Экзамен', fromGroup: true);
 
       expect(_state([named, added]).overridesReplacedBy(add).map((o) => o.id), ['added']);
+    });
+  });
+
+  group('Подгруппы: правка старосты видна только своей подгруппе', () {
+    Map<String, dynamic> fixture(String name) => jsonDecode(File('test/fixtures/$name').readAsStringSync()) as Map<String, dynamic>;
+    final index = ScheduleIndex.fromJson(fixture('index.json'));
+    final schedule = GroupSchedule.fromJson(fixture('ofo-1-bi-25.json'));
+    const first = UserProfile(formCode: 'ofo', groupId: 'ofo-1-bi-25', subgroup: 1, pe: PeChoice.male);
+    const second = UserProfile(formCode: 'ofo', groupId: 'ofo-1-bi-25', subgroup: 2, pe: PeChoice.male);
+    final monday = DateTime.utc(2026, 10, 26); // 3 пара: у 1-й подгруппы иностранный язык, у 2-й технологии бизнес-коммуникаций
+
+    List<ResolvedLesson> day(UserProfile p, List<Override> o) => resolve(monday, index, schedule, p, overrides: o);
+    Override announce(String subject, {LessonKind kind = LessonKind.attestation}) =>
+        Override(date: monday, pair: 3, type: OverrideType.replace, kind: kind, matchSubject: subject, fromGroup: true);
+
+    test('аттестации двух подгрупп в одно время живут вместе: каждая видна своей подгруппе', () {
+      final both = [announce('Иностранный язык'), announce('Технологии бизнес-коммуникаций', kind: LessonKind.credit)];
+
+      final a = day(first, both).singleWhere((l) => l.pair == 3);
+      final b = day(second, both).singleWhere((l) => l.pair == 3);
+      expect((a.subject, a.kind), ('Иностранный язык', LessonKind.attestation));
+      expect((b.subject, b.kind), ('Технологии бизнес-коммуникаций', LessonKind.credit));
+    });
+
+    test('отмена «для подгруппы» не трогает пару другой подгруппы, отмена «для всей группы» убирает обе', () {
+      final mine = Override(date: monday, pair: 3, type: OverrideType.cancel, matchSubject: 'Иностранный язык', fromGroup: true);
+      expect(day(first, [mine]).where((l) => l.pair == 3), isEmpty);
+      expect(day(second, [mine]).where((l) => l.pair == 3), hasLength(1));
+
+      final all = Override(date: monday, pair: 3, type: OverrideType.cancel, fromGroup: true);
+      expect(day(first, [all]).where((l) => l.pair == 3), isEmpty);
+      expect(day(second, [all]).where((l) => l.pair == 3), isEmpty);
+    });
+
+    test('перенесённая пара подгруппы появляется только у неё, пара «для всей группы» — у обеих', () {
+      // иностранный язык 1-й подгруппы с 3 пары перенесли на 5; у 2-й подгруппы иностранный язык в другое время (4 пара)
+      final cancel = Override(date: monday, pair: 3, type: OverrideType.cancel, matchSubject: 'Иностранный язык', note: moveMark(monday, 5), fromGroup: true);
+      Override added(String? match) =>
+          Override(date: monday, pair: 5, type: OverrideType.add, subject: 'Иностранный язык', note: movedNote, matchSubject: match, fromGroup: true);
+
+      expect(day(first, [cancel, added('Иностранный язык')]).where((l) => l.pair == 5), hasLength(1));
+      expect(day(second, [cancel, added('Иностранный язык')]).where((l) => l.pair == 5), isEmpty);
+      expect(day(second, [cancel, added('Иностранный язык')]).where((l) => l.pair == 4), hasLength(1)); // своя пара у второй подгруппы на месте
+      expect(day(first, [added(null)]).where((l) => l.pair == 5), hasLength(1));
+      expect(day(second, [added(null)]).where((l) => l.pair == 5), hasLength(1));
+    });
+
+    test('кому адресована правка: пара своей подгруппы, пара другой подгруппы, общая пара, без названия', () {
+      EditAudience of(String? subject, UserProfile p, {int pair = 3}) =>
+          audienceOf(Override(date: monday, pair: pair, type: OverrideType.cancel, matchSubject: subject, fromGroup: true), schedule, p);
+
+      expect(of('Иностранный язык', first), EditAudience.mine);
+      expect(of('Иностранный язык', second), EditAudience.other);
+      expect(of('Технологии бизнес-коммуникаций', first), EditAudience.other);
+      expect(of('Технологии бизнес-коммуникаций', second), EditAudience.mine);
+      expect(of('Философия', first, pair: 1), EditAudience.group); // ведётся у всей группы
+      expect(of(null, first), EditAudience.group);
+    });
+
+    test('два переноса в одно место от разных подгрупп: убрать один не убирает другой', () {
+      final mark = moveMark(parseDay('2026-10-26'), 5);
+      final cancelA = _row('ca', date: '2026-10-26', pair: 3, matchSubject: 'Иностранный язык', note: mark);
+      final addA = _row('aa', type: OverrideType.add, date: '2026-10-26', pair: 5, subject: 'Иностранный язык', matchSubject: 'Иностранный язык', note: movedNote);
+      final cancelB = _row('cb', date: '2026-10-26', pair: 3, matchSubject: 'Технологии бизнес-коммуникаций', note: mark);
+      final addB = _row('ab', type: OverrideType.add, date: '2026-10-26', pair: 5, subject: 'Технологии бизнес-коммуникаций', matchSubject: 'Технологии бизнес-коммуникаций', note: movedNote);
+      final state = _state([cancelA, addA, cancelB, addB]);
+
+      expect(state.withMovePartner(addA).map((o) => o.id).toSet(), {'aa', 'ca'});
+      expect(state.withMovePartner(addB).map((o) => o.id).toSet(), {'ab', 'cb'});
+      expect(state.withMovePartner(cancelB).map((o) => o.id).toSet(), {'cb', 'ab'});
     });
   });
 

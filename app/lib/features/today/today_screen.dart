@@ -13,6 +13,7 @@ import '../../domain/homework.dart';
 import '../../domain/lesson_homework.dart';
 import '../../domain/models.dart';
 import '../../domain/schedule_resolver.dart';
+import '../../domain/week_view.dart';
 import '../../theme/subject_palette.dart';
 import '../../theme/next_design.dart';
 import '../../theme/tokens.dart';
@@ -224,7 +225,7 @@ class _DayPage extends ConsumerWidget {
     final lessons = resolve(day, data.index, data.schedule, data.profile, overrides: data.overrides, forcedWeek: data.forcedWeek);
     final theme = Theme.of(context);
     final container = ProviderScope.containerOf(context);
-    final editsCount = data.overrides.where((o) => o.appliesOn(day)).length;
+    final editsCount = data.overrides.where((o) => o.appliesOn(day) && (!o.fromGroup || audienceOf(o, data.schedule, data.profile, all: data.overrides) != EditAudience.other)).length;
 
     // Потянуть вниз — проверить обновления (ошибки сети не показываем, см. АРХИТЕКТУРА.md §7.5)
     Future<void> refresh() async {
@@ -544,7 +545,7 @@ class _NowCard extends ConsumerWidget {
             // При очень крупном системном шрифте табличка и подписи идут друг под другом, а не в ряд
             Builder(builder: (context) {
               final big = MediaQuery.textScalerOf(context).scale(1) > 1.35;
-              final plate = lesson.room == null ? null : RoomPlate(room: lesson.room!, tone: tone, size: big ? 32 : 46, filled: true);
+              final plate = lesson.room == null ? null : RoomPlate(room: lesson.room!, tone: tone, size: big ? 26 : 34, filled: true);
               final info = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 if (lesson.teacher != null) Text(lesson.teacher!, style: theme.textTheme.titleSmall?.copyWith(color: scheme.onSurface)),
                 const SizedBox(height: Gap.xs),

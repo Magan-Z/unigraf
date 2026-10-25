@@ -164,7 +164,7 @@ class LessonTile extends ConsumerWidget {
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
                           alignment: Alignment.centerRight,
-                          child: RoomPlate(room: room!, tone: tone, size: 25, pop: kNextDesign && note != null),
+                          child: RoomPlate(room: room!, tone: tone, size: 23, pop: kNextDesign && note != null),
                         ),
                       ),
                     ],

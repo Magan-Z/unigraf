@@ -32,6 +32,7 @@ import 'domain/models.dart';
 import 'domain/subject_styles.dart';
 import 'domain/teacher.dart';
 import 'domain/teacher_homework.dart';
+import 'domain/week_view.dart';
 import 'notifications/notification_gateway.dart';
 import 'theme/brand_colors.dart';
 import 'widget_bridge/deep_links.dart';
@@ -560,10 +561,16 @@ Future<GroupNews> syncGroupShared(ProviderContainer c) async {
     // Уведомление только о ДЗ, которое относится ко мне (общее или для моей подгруппы)
     final mine = settings.profile?.subgroup;
     bool visible(GroupHomeworkRow h) => mine == null || h.visibleTo(mine);
+    // Аттестацию другой подгруппы (предмет, которого нет в моём расписании) не показываем
+    MySchedule? my;
+    try {
+      my = await c.read(myScheduleProvider.future);
+    } catch (_) {}
+    bool forMe(GroupOverrideRow o) => my == null || audienceOf(o.toOverride(), my.schedule, my.profile, all: [for (final r in result.state.overrides.values) r.toOverride()]) != EditAudience.other;
     return GroupNews(
       homework: [for (final h in result.newHomework) if (visible(h)) h],
       teacherHomework: [for (final h in result.newTeacherHomework) if (visible(h)) h],
-      assessments: result.newAssessments,
+      assessments: [for (final o in result.newAssessments) if (forMe(o)) o],
     );
   } on SharedApiException {
     return GroupNews.none;

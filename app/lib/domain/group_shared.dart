@@ -230,7 +230,7 @@ class GroupSharedState {
           if (e.date == o.date &&
               e.pair == o.pair &&
               (o.type == OverrideType.add ? e.type == OverrideType.add : e.type != OverrideType.add) &&
-              (o.type == OverrideType.add || e.matchSubject == null || o.matchSubject == null || e.matchSubject == o.matchSubject))
+              (e.matchSubject == null || o.matchSubject == null || e.matchSubject == o.matchSubject))
             e,
       ];
 
@@ -240,7 +240,10 @@ class GroupSharedState {
     final partners = <GroupOverrideRow>[];
     if (row.type == OverrideType.add && row.note == movedNote) {
       final mark = moveMark(row.date, row.pair);
-      final marked = [for (final o in overrides.values) if (o.type == OverrideType.cancel && o.note == mark) o];
+      final marked = [
+        for (final o in overrides.values)
+          if (o.type == OverrideType.cancel && o.note == mark && (row.matchSubject == null || o.matchSubject == row.matchSubject)) o, // две подгруппы могли перенести разные пары на одно место
+      ];
       if (marked.isNotEmpty) {
         partners.addAll(marked);
       } else {
@@ -261,7 +264,10 @@ class GroupSharedState {
         if (near.isNotEmpty) partners.add(near.first);
       }
     } else if (row.type == OverrideType.cancel && row.note != null && row.note!.startsWith(_moveMarkPrefix)) {
-      partners.addAll([for (final o in overrides.values) if (o.type == OverrideType.add && o.note == movedNote && moveMark(o.date, o.pair) == row.note) o]);
+      partners.addAll([
+        for (final o in overrides.values)
+          if (o.type == OverrideType.add && o.note == movedNote && moveMark(o.date, o.pair) == row.note && (o.matchSubject == null || o.matchSubject == row.matchSubject)) o,
+      ]);
     }
     return [row, ...partners];
   }

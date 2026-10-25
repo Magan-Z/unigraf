@@ -14,6 +14,7 @@ import '../../domain/models.dart';
 import '../../domain/overrides_text.dart';
 import '../../domain/pair_suggestions.dart';
 import '../../domain/search.dart' show teacherFullName;
+import '../../domain/week_view.dart';
 import '../../theme/tokens.dart';
 import '../../data/remote/shared_api.dart';
 import '../../group_actions.dart';
@@ -77,11 +78,13 @@ Future<void> showLessonActions(BuildContext context, ResolvedLesson lesson) {
   final isEditor = container.read(isGroupEditorProvider);
   // Преподаватель: пары приходят из расписания групп, личные правки в версии 1 не поддерживаются
   final isTeacher = container.read(isTeacherModeProvider);
-  Future<void> saveForGroup(List<Override> items) async {
+  final schedule = container.read(myScheduleProvider).value?.schedule;
+  final hasSubgroups = schedule != null && schedule.subgroups.length > 1;
+  Future<void> saveForGroup(List<Override> items, {bool whole = true}) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await GroupEditorActions(container).saveOverrides(items);
-      messenger.showSnackBar(const SnackBar(content: Text('Сохранено для всей группы')));
+      messenger.showSnackBar(SnackBar(content: Text(whole || !hasSubgroups ? 'Сохранено для всей группы' : 'Сохранено для вашей подгруппы')));
     } on SharedApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     }
@@ -91,7 +94,7 @@ Future<void> showLessonActions(BuildContext context, ResolvedLesson lesson) {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await GroupEditorActions(container).removeLessonEdits(lesson);
-      messenger.showSnackBar(const SnackBar(content: Text('Правка старосты убрана для всей группы')));
+      messenger.showSnackBar(const SnackBar(content: Text('Правка старосты убрана')));
     } on SharedApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     }
@@ -229,95 +232,17 @@ Future<void> showLessonActions(BuildContext context, ResolvedLesson lesson) {
                   container.invalidate(overridesProvider);
                 },
               ),
-            if (isEditor) ...[
-              const Divider(),
-              ListTile(
-                dense: true,
-                leading: Icon(Icons.groups_rounded, color: theme.colorScheme.primary),
-                title: Text('Для всей группы (вы староста)', style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.primary)),
+            if (isEditor)
+              _EditorSection(
+                lesson: lesson,
+                container: container,
+                hasSubgroups: hasSubgroups,
+                close: close,
+                save: saveForGroup,
+                removeEdits: removeGroupEdits,
+                dialogContext: context,
+                suggestions: () => _suggestionsFrom(container),
               ),
-              ListTile(
-                leading: const Icon(Icons.edit_rounded),
-                title: const Text('Изменить для группы'),
-                subtitle: const Text('Аудитория, преподаватель или заметка — у всех'),
-                onTap: () async {
-                  close();
-                  final suggestions = _suggestionsFrom(container);
-                final changed = await showDialog<Override>(context: context, builder: (_) => _ReplaceDialog(lesson: lesson, suggestions: suggestions));
-                  if (changed != null) await saveForGroup([changed]);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.quiz_rounded),
-                title: const Text('Объявить аттестацию, зачёт или экзамен'),
-                subtitle: const Text('Для вашей подгруппы — у всех, кто в ней'),
-                onTap: () async {
-                  close();
-                  final announced = await _askAnnounce(context, container, lesson, forGroup: true);
-                  if (announced != null) await saveForGroup([announced]);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.drive_file_move_rounded),
-                title: const Text('Перенести для группы'),
-                onTap: () async {
-                  close();
-                  final move = await showDialog<_Move>(context: context, builder: (_) => _MoveDialog(lesson: lesson));
-                  if (move == null) return;
-                  await saveForGroup([
-                    Override(
-                      date: lesson.date,
-                      pair: lesson.pair,
-                      type: OverrideType.cancel,
-                      repeatWeekly: move.repeat,
-                      matchSubject: move.repeat ? lesson.subject : null,
-                      // метка связывает отмену с новым местом пары: «убрать правку» возвращает пару на прежнее место
-                      note: moveMark(move.date, move.pair),
-                    ),
-                    Override(
-                      date: move.date,
-                      pair: move.pair,
-                      type: OverrideType.add,
-                      subject: lesson.subject,
-                      teacher: lesson.teacher,
-                      room: lesson.room,
-                      kind: lesson.kind,
-                      note: movedNote,
-                      repeatWeekly: move.repeat,
-                    ),
-                  ]);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.event_busy_rounded),
-                title: const Text('Отменить пару для группы'),
-                subtitle: const Text('На этот день, у всех'),
-                onTap: () async {
-                  close();
-                  await saveForGroup([Override(date: lesson.date, pair: lesson.pair, type: OverrideType.cancel)]);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.event_repeat_rounded),
-                title: const Text('Отменить для группы каждую неделю'),
-                onTap: () async {
-                  close();
-                  await saveForGroup([
-                    Override(date: lesson.date, pair: lesson.pair, type: OverrideType.cancel, repeatWeekly: true, matchSubject: lesson.subject),
-                  ]);
-                },
-              ),
-              if (lesson.isGroup)
-                ListTile(
-                  leading: const Icon(Icons.undo_rounded),
-                  title: const Text('Убрать правку старосты'),
-                  subtitle: const Text('Пара вернётся к расписанию — у всей группы'),
-                  onTap: () async {
-                    close();
-                    await removeGroupEdits();
-                  },
-                ),
-            ],
             ],
             const SizedBox(height: Gap.sm),
           ]),
@@ -325,6 +250,159 @@ Future<void> showLessonActions(BuildContext context, ResolvedLesson lesson) {
       );
     },
   );
+}
+
+/// Действия старосты над парой. Если в группе есть подгруппы, староста выбирает, кому они адресованы:
+/// своей подгруппе (правка действует только на пары с этим названием) или всей группе (на любую пару в это время).
+class _EditorSection extends StatefulWidget {
+  const _EditorSection({
+    required this.lesson,
+    required this.container,
+    required this.hasSubgroups,
+    required this.close,
+    required this.save,
+    required this.removeEdits,
+    required this.dialogContext,
+    required this.suggestions,
+  });
+
+  final ResolvedLesson lesson;
+  final ProviderContainer container;
+  final bool hasSubgroups;
+  final VoidCallback close;
+  final Future<void> Function(List<Override> items, {bool whole}) save;
+  final Future<void> Function() removeEdits;
+  final BuildContext dialogContext;
+  final PairSuggestions Function() suggestions;
+
+  @override
+  State<_EditorSection> createState() => _EditorSectionState();
+}
+
+class _EditorSectionState extends State<_EditorSection> {
+  bool _whole = false;
+
+  ResolvedLesson get lesson => widget.lesson;
+
+  /// Правка для всей группы или для всех, если подгрупп нет.
+  bool get _forAll => _whole || !widget.hasSubgroups;
+
+  /// Правка «для подгруппы» действует только на пары с этим названием.
+  Override _scoped(Override o) => _forAll ? o : o.withMatchSubject(o.matchSubject ?? lesson.subject);
+
+  Future<void> _save(List<Override> items) => widget.save([for (final o in items) _scoped(o)], whole: _forAll);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final target = _forAll ? 'группы' : 'подгруппы';
+    final who = _forAll ? 'у всей группы' : 'у вашей подгруппы';
+    final dialogContext = widget.dialogContext;
+
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      const Divider(),
+      ListTile(
+        dense: true,
+        leading: Icon(Icons.groups_rounded, color: theme.colorScheme.primary),
+        title: Text(widget.hasSubgroups ? 'Для других студентов (вы староста)' : 'Для всей группы (вы староста)',
+            style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.primary)),
+      ),
+      if (widget.hasSubgroups)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Gap.lg),
+          child: SegmentedButton<bool>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: false, label: Text('Моя подгруппа', textAlign: TextAlign.center)),
+              ButtonSegment(value: true, label: Text('Вся группа', textAlign: TextAlign.center)),
+            ],
+            selected: {_whole},
+            onSelectionChanged: (v) => setState(() => _whole = v.first),
+          ),
+        ),
+      ListTile(
+        leading: const Icon(Icons.edit_rounded),
+        title: Text('Изменить для $target'),
+        subtitle: Text('Аудитория, преподаватель или заметка — $who'),
+        onTap: () async {
+          widget.close();
+          final changed = await showDialog<Override>(context: dialogContext, builder: (_) => _ReplaceDialog(lesson: lesson, suggestions: widget.suggestions()));
+          if (changed != null) await _save([changed]);
+        },
+      ),
+      ListTile(
+        leading: const Icon(Icons.quiz_rounded),
+        title: const Text('Объявить аттестацию, зачёт или экзамен'),
+        subtitle: Text(widget.hasSubgroups ? 'Для вашей подгруппы — у всех, кто в ней' : 'У всей группы'),
+        onTap: () async {
+          widget.close();
+          final announced = await _askAnnounce(dialogContext, widget.container, lesson, forGroup: true);
+          // название предмета в объявлении уже есть: оно и так относится к подгруппе, у которой этот предмет
+          if (announced != null) await widget.save([announced], whole: !widget.hasSubgroups);
+        },
+      ),
+      ListTile(
+        leading: const Icon(Icons.drive_file_move_rounded),
+        title: Text('Перенести для $target'),
+        onTap: () async {
+          widget.close();
+          final move = await showDialog<_Move>(context: dialogContext, builder: (_) => _MoveDialog(lesson: lesson));
+          if (move == null) return;
+          await _save([
+            Override(
+              date: lesson.date,
+              pair: lesson.pair,
+              type: OverrideType.cancel,
+              repeatWeekly: move.repeat,
+              matchSubject: move.repeat ? lesson.subject : null,
+              // метка связывает отмену с новым местом пары: «убрать правку» возвращает пару на прежнее место
+              note: moveMark(move.date, move.pair),
+            ),
+            Override(
+              date: move.date,
+              pair: move.pair,
+              type: OverrideType.add,
+              subject: lesson.subject,
+              teacher: lesson.teacher,
+              room: lesson.room,
+              kind: lesson.kind,
+              note: movedNote,
+              repeatWeekly: move.repeat,
+            ),
+          ]);
+        },
+      ),
+      ListTile(
+        leading: const Icon(Icons.event_busy_rounded),
+        title: Text('Отменить пару для $target'),
+        subtitle: Text('На этот день, $who'),
+        onTap: () async {
+          widget.close();
+          await _save([Override(date: lesson.date, pair: lesson.pair, type: OverrideType.cancel)]);
+        },
+      ),
+      ListTile(
+        leading: const Icon(Icons.event_repeat_rounded),
+        title: Text('Отменить для $target каждую неделю'),
+        onTap: () async {
+          widget.close();
+          await _save([
+            Override(date: lesson.date, pair: lesson.pair, type: OverrideType.cancel, repeatWeekly: true, matchSubject: lesson.subject),
+          ]);
+        },
+      ),
+      if (lesson.isGroup)
+        ListTile(
+          leading: const Icon(Icons.undo_rounded),
+          title: const Text('Убрать правку старосты'),
+          subtitle: const Text('Пара вернётся к расписанию — у всех, кого правка касалась'),
+          onTap: () async {
+            widget.close();
+            await widget.removeEdits();
+          },
+        ),
+    ]);
+  }
 }
 
 /// «Мои правки на этот день»: список правок (чтобы вернуть отменённую пару) и добавление своей пары.
@@ -346,7 +424,14 @@ class _DayEditsSheet extends ConsumerWidget {
     final all = ref.watch(overridesProvider).value ?? const [];
     final mine = [for (final o in all) if (o.appliesOn(day)) o];
     // Правки старосты для всей группы: видны всем, убрать их может староста
-    final group = [for (final o in ref.watch(myScheduleProvider).value?.overrides ?? const <Override>[]) if (o.fromGroup && o.appliesOn(day)) o];
+    final data = ref.watch(myScheduleProvider).value;
+    final group = [for (final o in data?.overrides ?? const <Override>[]) if (o.fromGroup && o.appliesOn(day)) o];
+    // В группе с подгруппами правки старосты делятся: для вашей подгруппы, для всей группы, для другой подгруппы
+    final split = data != null && data.schedule.subgroups.length > 1;
+    EditAudience audience(Override o) => split ? audienceOf(o, data.schedule, data.profile, all: group) : EditAudience.group;
+    final forMine = [for (final o in group) if (audience(o) == EditAudience.mine) o];
+    final forGroup = [for (final o in group) if (audience(o) == EditAudience.group) o];
+    final forOther = [for (final o in group) if (audience(o) == EditAudience.other) o];
     final isEditor = ref.watch(isGroupEditorProvider);
     final repo = ref.read(overridesRepositoryProvider);
     final theme = Theme.of(context);
@@ -359,6 +444,19 @@ class _DayEditsSheet extends ConsumerWidget {
         messenger.showSnackBar(SnackBar(content: Text(e.message)));
       }
     }
+
+    Widget groupTile(Override o, String caption) => ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(describeOverride(o)),
+          subtitle: Text(o.repeatWeekly ? '$caption · каждую неделю' : caption),
+          trailing: isEditor
+              ? IconButton(
+                  tooltip: 'Убрать правку',
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  onPressed: () => removeGroupEdit(o),
+                )
+              : null,
+        );
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -374,19 +472,14 @@ class _DayEditsSheet extends ConsumerWidget {
                 style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
             ),
-          for (final o in group)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(describeOverride(o)),
-              subtitle: Text(o.repeatWeekly ? 'Правка старосты для всей группы · каждую неделю' : 'Правка старосты для всей группы'),
-              trailing: isEditor
-                  ? IconButton(
-                      tooltip: 'Убрать правку для всей группы',
-                      icon: const Icon(Icons.delete_outline_rounded),
-                      onPressed: () => removeGroupEdit(o),
-                    )
-                  : null,
-            ),
+          if (split && forMine.isNotEmpty) _EditsHeader('Для вашей подгруппы'),
+          for (final o in forMine) groupTile(o, 'Правка старосты для вашей подгруппы'),
+          if (split && forGroup.isNotEmpty) _EditsHeader('Для всей группы'),
+          for (final o in forGroup) groupTile(o, 'Правка старосты для всей группы'),
+          if (split && isEditor && forOther.isNotEmpty) _EditsHeader('Для другой подгруппы'),
+          if (isEditor)
+            for (final o in forOther) groupTile(o, 'Правка старосты для другой подгруппы — у вас в расписании её не видно'),
+          if (split && mine.isNotEmpty && (forMine.isNotEmpty || forGroup.isNotEmpty || (isEditor && forOther.isNotEmpty))) _EditsHeader('Только мои'),
           for (final o in mine)
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -428,6 +521,18 @@ class _DayEditsSheet extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Подпись блока в списке правок.
+class _EditsHeader extends StatelessWidget {
+  const _EditsHeader(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: Gap.md),
+        child: Text(text, style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+      );
 }
 
 /// Переключатель «Каждую неделю» с пояснением.

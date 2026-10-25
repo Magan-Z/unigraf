@@ -27,7 +27,7 @@ List<ResolvedLesson> resolve(
     final week = forcedWeek ?? weekNumber(day, index.weekAnchor);
     for (final group in [true, false]) {
       final layer = [for (final o in overrides) if (o.fromGroup == group && o.type == OverrideType.add && !o.repeatWeekly) o];
-      _applyOverrides(result, layer, day, index, week, group: group);
+      _applyOverrides(result, layer, day, index, week, group: group, schedule: schedule, profile: profile, all: overrides);
     }
     result.sort((a, b) => a.pair.compareTo(b.pair));
     return result;
@@ -48,8 +48,8 @@ List<ResolvedLesson> resolve(
   }
 
   // 5. Правки: сначала старосты (для всей группы), поверх них — личные.
-  _applyOverrides(result, [for (final o in overrides) if (o.fromGroup) o], day, index, week, group: true);
-  _applyOverrides(result, [for (final o in overrides) if (!o.fromGroup) o], day, index, week, group: false);
+  _applyOverrides(result, [for (final o in overrides) if (o.fromGroup) o], day, index, week, group: true, schedule: schedule, profile: profile, all: overrides);
+  _applyOverrides(result, [for (final o in overrides) if (!o.fromGroup) o], day, index, week, group: false, schedule: schedule, profile: profile, all: overrides);
 
   // 6. По порядку пар (время уже проставлено в _toResolved)
   result.sort((a, b) => a.pair.compareTo(b.pair));
@@ -58,7 +58,8 @@ List<ResolvedLesson> resolve(
 
 /// Применяет один «слой» правок к списку пар дня. Сначала правила «каждую неделю», потом правки на конкретный день —
 /// они главнее. Отмены и замены применяются раньше добавлений: перенесённая пара не должна отмениться собственной отменой.
-void _applyOverrides(List<ResolvedLesson> result, List<Override> layer, DateTime day, ScheduleIndex index, int week, {required bool group}) {
+void _applyOverrides(List<ResolvedLesson> result, List<Override> layer, DateTime day, ScheduleIndex index, int week,
+    {required bool group, required GroupSchedule schedule, required UserProfile profile, required List<Override> all}) {
   final applicable = layer.where((o) => o.appliesOn(day)).toList()
     ..sort((a, b) => a.repeatWeekly == b.repeatWeekly ? 0 : (a.repeatWeekly ? -1 : 1));
   bool matches(Override o, ResolvedLesson l) => l.pair == o.pair && (o.matchSubject == null || l.subject == o.matchSubject);
@@ -84,6 +85,8 @@ void _applyOverrides(List<ResolvedLesson> result, List<Override> layer, DateTime
     }
   }
   for (final o in applicable.where((o) => o.type == OverrideType.add)) {
+    // пара, перенесённая старостой для другой подгруппы, у вас не появляется
+    if (group && o.matchSubject != null && audienceOf(o, schedule, profile, all: all) == EditAudience.other) continue;
     result.add(_toResolved(day, o.pair, index.bells, week,
         subject: o.subject ?? 'Занятие',
         teacher: o.teacher,

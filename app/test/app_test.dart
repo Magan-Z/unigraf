@@ -453,7 +453,7 @@ void main() {
       expect(find.text('Изменения для группы'), findsOneWidget);
     });
 
-    testWidgets('староста отменяет пару для всей группы: пара исчезает, на сервер уходит правка с хешем расписания', (tester) async {
+    testWidgets('староста отменяет пару для подгруппы: пара исчезает, правка привязана к предмету и хешу расписания', (tester) async {
       final backend = FakeBackend(hash: groupHash());
       await _start(tester, prefs: {...profile, 'editorToken': 'tok-GOODCODE', 'editorGroup': 'ofo-1-bi-25'}, sharedApi: backend.api());
       await _settle(tester);
@@ -461,8 +461,8 @@ void main() {
 
       await tester.longPress(find.text('ЧТК и этика').last);
       await _settle(tester);
-      await tester.dragUntilVisible(find.text('Отменить пару для группы'), find.byType(Scrollable).last, const Offset(0, -200));
-      await tester.tap(find.text('Отменить пару для группы'));
+      await tester.dragUntilVisible(find.text('Отменить пару для подгруппы'), find.byType(Scrollable).last, const Offset(0, -200));
+      await tester.tap(find.text('Отменить пару для подгруппы'));
       await _settle(tester);
 
       expect(backend.calls, contains('put_group_override'));
@@ -470,8 +470,29 @@ void main() {
       expect(saved['type'], 'cancel');
       expect(saved['pair'], 4);
       expect(saved['date'], '2026-10-07');
+      expect(saved['match_subject'], 'ЧТК и этика'); // другой предмет в это время (у другой подгруппы) не отменяется
       expect(saved['base_hash'], groupHash());
-      expect(find.text('ЧТК и этика'), findsNothing); // у всех (и у самого старосты) пары нет
+      expect(find.text('ЧТК и этика'), findsNothing);
+      expect(find.text('Сохранено для вашей подгруппы'), findsOneWidget);
+    });
+
+    testWidgets('староста отменяет пару для всей группы: выбор «Вся группа», правка без названия предмета', (tester) async {
+      final backend = FakeBackend(hash: groupHash());
+      await _start(tester, prefs: {...profile, 'editorToken': 'tok-GOODCODE', 'editorGroup': 'ofo-1-bi-25'}, sharedApi: backend.api());
+      await _settle(tester);
+
+      await tester.longPress(find.text('ЧТК и этика').last);
+      await _settle(tester);
+      await tester.dragUntilVisible(find.text('Вся группа'), find.byType(Scrollable).last, const Offset(0, -200));
+      await tester.tap(find.text('Вся группа'));
+      await tester.pump();
+      await tester.dragUntilVisible(find.text('Отменить пару для группы'), find.byType(Scrollable).last, const Offset(0, -200));
+      await tester.tap(find.text('Отменить пару для группы'));
+      await _settle(tester);
+
+      final saved = backend.overrides.values.single;
+      expect((saved['type'], saved['pair'], saved['match_subject']), ('cancel', 4, null));
+      expect(find.text('Сохранено для всей группы'), findsOneWidget);
     });
 
     testWidgets('предупреждение про личные данные в файлах показывается только когда ДЗ идёт всей группе', (tester) async {
@@ -586,13 +607,81 @@ void main() {
       expect(find.text('Отменена: 4 пара'), findsOneWidget);
       expect(find.text('Правка старосты для всей группы'), findsOneWidget);
 
-      await tester.tap(find.byTooltip('Убрать правку для всей группы'));
+      await tester.tap(find.byTooltip('Убрать правку'));
       await _settle(tester);
       expect(backend.overrides['c1']!['deleted'], isTrue);
       expect(find.text('Отменена: 4 пара'), findsNothing);
       await tester.tapAt(const Offset(10, 10));
       await _settle(tester);
       expect(find.text('ЧТК и этика'), findsWidgets); // пара вернулась в расписание
+    });
+
+    testWidgets('«Мои правки» делятся: для вашей подгруппы и для всей группы; правку другой подгруппы видит только староста', (tester) async {
+      Future<FakeBackend> open(WidgetTester tester, Map<String, Object> prefs) async {
+        final backend = FakeBackend(hash: groupHash());
+        // 3 пара в среду — управление проектами у 2-й подгруппы; правка без названия — для всей группы
+        backend.overrides['sub'] = {...backend.override(id: 'sub', pair: 2, room: '3-33'), 'match_subject': 'Управление проектами'};
+        backend.overrides['all'] = backend.override(id: 'all', pair: 4, room: '1-01');
+        await _start(tester, prefs: prefs, sharedApi: backend.api());
+        await _settle(tester);
+        return backend;
+      }
+
+      // вторая подгруппа: видит обе правки в двух блоках
+      await open(tester, {...profile, 'subgroup': 2, ...editor});
+      await tester.tap(find.text('Мои правки (2)'));
+      await _settle(tester);
+      expect(find.text('Для вашей подгруппы'), findsOneWidget);
+      expect(find.text('Для всей группы'), findsOneWidget);
+      expect(find.text('Для другой подгруппы'), findsNothing);
+      expect(find.text('Правка старосты для вашей подгруппы'), findsOneWidget);
+    });
+
+    testWidgets('первая подгруппа: правка второй не попадает ни в счётчик, ни в список; староста видит её отдельным блоком', (tester) async {
+      final backend = FakeBackend(hash: groupHash());
+      backend.overrides['sub'] = {...backend.override(id: 'sub', pair: 2, room: '3-33'), 'match_subject': 'Управление проектами'};
+      backend.overrides['all'] = backend.override(id: 'all', pair: 4, room: '1-01');
+      await _start(tester, prefs: {...profile, ...editor}, sharedApi: backend.api());
+      await _settle(tester);
+
+      expect(find.text('Мои правки (1)'), findsOneWidget); // правка второй подгруппы не считается
+      await tester.tap(find.text('Мои правки (1)'));
+      await _settle(tester);
+      expect(find.text('Для вашей подгруппы'), findsNothing);
+      expect(find.text('Для всей группы'), findsOneWidget);
+      expect(find.text('Для другой подгруппы'), findsOneWidget); // староста: чтобы можно было убрать, не переключая подгруппу
+      expect(find.text('Правка старосты для другой подгруппы — у вас в расписании её не видно'), findsOneWidget);
+    });
+
+    testWidgets('студент первой подгруппы не видит правки второй в «Мои правки»', (tester) async {
+      final backend = FakeBackend(hash: groupHash());
+      backend.overrides['sub'] = {...backend.override(id: 'sub', pair: 2, room: '3-33'), 'match_subject': 'Управление проектами'};
+      backend.overrides['all'] = backend.override(id: 'all', pair: 4, room: '1-01');
+      await _start(tester, prefs: profile, sharedApi: backend.api());
+      await _settle(tester);
+
+      await tester.tap(find.text('Мои правки (1)'));
+      await _settle(tester);
+      expect(find.text('Для другой подгруппы'), findsNothing);
+      expect(find.text('Правка старосты для другой подгруппы — у вас в расписании её не видно'), findsNothing);
+      expect(find.textContaining('Управление проектами'), findsNothing);
+    });
+
+    testWidgets('староста при крупном шрифте: выбор «Моя подгруппа / Вся группа» помещается', (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      tester.view.physicalSize = const Size(320 * 3, 640 * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      final backend = FakeBackend(hash: groupHash());
+      await _start(tester, prefs: {...profile, ...editor}, sharedApi: backend.api());
+      await _settle(tester);
+
+      await tester.longPress(find.text('ЧТК и этика').last);
+      await _settle(tester);
+      await tester.dragUntilVisible(find.text('Вся группа'), find.byType(Scrollable).last, const Offset(0, -200));
+      expect(find.text('Моя подгруппа'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('студент видит правку старосты в «Мои правки», но убрать её не может', (tester) async {
@@ -604,7 +693,7 @@ void main() {
       await tester.tap(find.text('Мои правки (1)'));
       await _settle(tester);
       expect(find.text('Отменена: 4 пара'), findsOneWidget);
-      expect(find.byTooltip('Убрать правку для всей группы'), findsNothing);
+      expect(find.byTooltip('Убрать правку'), findsNothing);
     });
 
     testWidgets('староста переносит пару для группы и убирает правку: пара возвращается на прежнее место', (tester) async {
@@ -614,8 +703,8 @@ void main() {
 
       await tester.longPress(find.text('ЧТК и этика').last);
       await _settle(tester);
-      await tester.dragUntilVisible(find.text('Перенести для группы'), find.byType(Scrollable).last, const Offset(0, -200));
-      await tester.tap(find.text('Перенести для группы'));
+      await tester.dragUntilVisible(find.text('Перенести для подгруппы'), find.byType(Scrollable).last, const Offset(0, -200));
+      await tester.tap(find.text('Перенести для подгруппы'));
       await _settle(tester);
       await tester.tap(find.text('5 пара'));
       await tester.pump();
@@ -645,8 +734,8 @@ void main() {
       await _settle(tester);
       await tester.longPress(find.text('ЧТК и этика').last);
       await _settle(tester);
-      await tester.dragUntilVisible(find.text('Перенести для группы'), find.byType(Scrollable).last, const Offset(0, -200));
-      await tester.tap(find.text('Перенести для группы'));
+      await tester.dragUntilVisible(find.text('Перенести для подгруппы'), find.byType(Scrollable).last, const Offset(0, -200));
+      await tester.tap(find.text('Перенести для подгруппы'));
       await _settle(tester);
       await tester.tap(find.text('5 пара'));
       await tester.pump();
@@ -655,8 +744,8 @@ void main() {
 
       await tester.tap(find.text('Мои правки (2)'));
       await _settle(tester);
-      expect(find.byTooltip('Убрать правку для всей группы'), findsNWidgets(2));
-      await tester.tap(find.byTooltip('Убрать правку для всей группы').last);
+      expect(find.byTooltip('Убрать правку'), findsNWidgets(2));
+      await tester.tap(find.byTooltip('Убрать правку').last);
       await _settle(tester);
 
       expect(backend.overrides.values.where((o) => o['deleted'] != true), isEmpty);
@@ -815,8 +904,8 @@ void main() {
       // и наоборот: потом поменяли аудиторию — тип остался
       await tester.longPress(find.text('ЧТК и этика').last);
       await _settle(tester);
-      await tester.dragUntilVisible(find.text('Изменить для группы'), find.byType(Scrollable).last, const Offset(0, -200));
-      await tester.tap(find.text('Изменить для группы'));
+      await tester.dragUntilVisible(find.text('Изменить для подгруппы'), find.byType(Scrollable).last, const Offset(0, -200));
+      await tester.tap(find.text('Изменить для подгруппы'));
       await _settle(tester);
       await tester.enterText(find.widgetWithText(TextField, 'Аудитория'), '1-01');
       await tester.tap(find.text('Сохранить'));

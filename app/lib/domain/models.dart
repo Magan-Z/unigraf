@@ -304,6 +304,24 @@ class Override {
   /// Действует ли правка в этот день.
   bool appliesOn(DateTime day) => date == day || (repeatWeekly && !day.isBefore(date) && day.weekday == date.weekday);
 
+  /// Та же правка, но действующая только на пары с названием [subject] (правка «для подгруппы»).
+  Override withMatchSubject(String? subject) => Override(
+        id: id,
+        date: date,
+        pair: pair,
+        type: type,
+        subject: this.subject,
+        room: room,
+        teacher: teacher,
+        note: note,
+        kind: kind,
+        repeatWeekly: repeatWeekly,
+        matchSubject: subject,
+        fromGroup: fromGroup,
+        remoteId: remoteId,
+        changedAt: changedAt,
+      );
+
   /// Правка «заменить» поверх прежней правки той же пары: что здесь не задано, берётся из [old].
   /// Так аудитория, преподаватель, заметка и тип (аттестация) не пропадают, когда пару правят второй раз.
   Override mergedOver(Override old) => Override(
