@@ -222,6 +222,18 @@ class GroupSharedState {
         syncedAt: syncedAt,
       );
 
+  /// Правки, которые новая правка [o] заменяет: на ту же пару в тот же день (своя пара «add» — только среди своих пар).
+  /// У двух подгрупп в одно время идут разные предметы: правка с названием предмета (например, аттестация) заменяет только правку
+  /// того же предмета или правку без названия (на всю пару). Правка другого предмета остаётся — это пара другой подгруппы.
+  List<GroupOverrideRow> overridesReplacedBy(Override o) => [
+        for (final e in overrides.values)
+          if (e.date == o.date &&
+              e.pair == o.pair &&
+              (o.type == OverrideType.add ? e.type == OverrideType.add : e.type != OverrideType.add) &&
+              (o.type == OverrideType.add || e.matchSubject == null || o.matchSubject == null || e.matchSubject == o.matchSubject))
+            e,
+      ];
+
   /// Правки, которые убираются вместе с [row]: перенос пары — это две правки (отмена на старом месте и своя пара на новом),
   /// и «вернуть как было» должно убрать обе. Для переносов, сделанных до появления метки в отмене, пару ищем по времени.
   List<GroupOverrideRow> withMovePartner(GroupOverrideRow row) {

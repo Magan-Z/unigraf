@@ -90,6 +90,54 @@ void main() {
     });
   });
 
+  group('Новая правка старосты заменяет только свою пару', () {
+    Override announce(String subject, {int pair = 2, String date = '2026-10-26'}) => Override(
+          date: parseDay(date),
+          pair: pair,
+          type: OverrideType.replace,
+          kind: LessonKind.attestation,
+          matchSubject: subject,
+          fromGroup: true,
+        );
+
+    test('аттестация второй подгруппы в то же время не стирает аттестацию первой', () {
+      final first = _row('first', type: OverrideType.replace, date: '2026-10-26', pair: 2, matchSubject: 'Математика');
+      final state = _state([first]);
+
+      expect(state.overridesReplacedBy(announce('Английский')), isEmpty);
+    });
+
+    test('повторное объявление по тому же предмету заменяет прежнее', () {
+      final first = _row('first', type: OverrideType.replace, date: '2026-10-26', pair: 2, matchSubject: 'Математика');
+      expect(_state([first]).overridesReplacedBy(announce('Математика')).map((o) => o.id), ['first']);
+    });
+
+    test('в разное время правки друг друга не задевают', () {
+      final first = _row('first', type: OverrideType.replace, date: '2026-10-26', pair: 2, matchSubject: 'Математика');
+      final state = _state([first]);
+
+      expect(state.overridesReplacedBy(announce('Английский', pair: 3)), isEmpty);
+      expect(state.overridesReplacedBy(announce('Математика', date: '2026-10-27')), isEmpty);
+    });
+
+    test('правка на всю пару (без названия) по-прежнему заменяется и заменяет', () {
+      final whole = _row('whole', date: '2026-10-26', pair: 2); // отмена пары для всех
+      final named = _row('named', type: OverrideType.replace, date: '2026-10-26', pair: 2, matchSubject: 'Математика');
+
+      expect(_state([whole]).overridesReplacedBy(announce('Математика')).map((o) => o.id), ['whole']);
+      final cancelAll = Override(date: parseDay('2026-10-26'), pair: 2, type: OverrideType.cancel, fromGroup: true);
+      expect(_state([named]).overridesReplacedBy(cancelAll).map((o) => o.id), ['named']);
+    });
+
+    test('своя пара «add» заменяет только свои пары, а не отмены и замены', () {
+      final named = _row('named', type: OverrideType.replace, date: '2026-10-26', pair: 2, matchSubject: 'Математика');
+      final added = _row('added', type: OverrideType.add, date: '2026-10-26', pair: 2, subject: 'Консультация');
+      final add = Override(date: parseDay('2026-10-26'), pair: 2, type: OverrideType.add, subject: 'Экзамен', fromGroup: true);
+
+      expect(_state([named, added]).overridesReplacedBy(add).map((o) => o.id), ['added']);
+    });
+  });
+
   group('Мгновенные изменения кэша', () {
     test('ДЗ убирается и возвращается; остальное не трогается', () {
       final hw = GroupHomeworkRow(id: 'h', subject: 'Философия', text: 'Читать', dueDate: DateTime.utc(2026, 10, 14));

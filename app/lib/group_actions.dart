@@ -45,10 +45,7 @@ class GroupEditorActions {
     final current = await _repo.cached(_session.groupId);
 
     for (var o in list) {
-      final same = [
-        for (final e in current.overrides.values)
-          if (e.date == o.date && e.pair == o.pair && (o.type == OverrideType.add ? e.type == OverrideType.add : e.type != OverrideType.add)) e,
-      ];
+      final same = current.overridesReplacedBy(o);
       final toReplace = [for (final e in same) e.id];
       // «Заменить» складывается с прежней заменой этой пары: аудитория, заметка, тип (аттестация) не теряются
       if (o.type == OverrideType.replace) {
