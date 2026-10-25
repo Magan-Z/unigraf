@@ -1,7 +1,6 @@
-// Значок домашнего задания на карточке пары: квадратная кнопка с рамкой в правом верхнем углу, как «табличка» аудитории,
-// только красная. Внутри прежний значок приложения (портфель с восклицательным знаком). Красная — есть невыполненное
-// (с цифрой, если заданий несколько); серая с галочкой — всё сделано. Фон кнопки берётся из темы, поэтому в тёмной теме она тёмная.
-// Нажатие открывает окно со списком заданий к этой паре.
+// Значок домашнего задания на карточке пары: квадратная кнопка в правом верхнем углу (вариант выбран владельцем 2026-10-25).
+// Красная заливка с белым значком «планшет со списком»: есть невыполненное; красный кружок с цифрой, если заданий несколько.
+// Всё сделано: светлая плитка с серым значком и галочкой (в тёмной теме тёмно-серая). Нажатие открывает окно со списком заданий.
 
 import 'package:flutter/material.dart';
 
@@ -10,6 +9,9 @@ import '../../domain/lesson_homework.dart';
 import '../../theme/next_design.dart';
 import '../../theme/tokens.dart';
 import 'press_scale.dart';
+
+/// Красный цвет значка «надо сделать»: один и тот же в светлой и тёмной теме, белый значок на нём читается (контраст ≥ 4,5:1).
+const Color homeworkRed = Color(0xFFD92D20);
 
 /// Подпись для экранной читалки (одна и та же на «Сегодня» и в «Неделе»).
 String homeworkBadgeLabel(LessonHomework hw) {
@@ -36,18 +38,21 @@ class HomeworkBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
     final done = homework.allDone;
     final count = homework.open;
-    // Красная — «надо сделать»; серая — сделано. Рамка и значок одного цвета, фон из темы (как у таблички аудитории).
-    final color = done ? scheme.onSurfaceVariant : scheme.error;
-    final border = done ? scheme.outlineVariant : scheme.error;
+
+    // Сделано: в светлой теме белая плитка с тонкой рамкой, в тёмной полупрозрачно-серая
+    final bg = done ? (dark ? scheme.onSurface.withValues(alpha: 0.16) : scheme.surfaceContainerLowest) : homeworkRed;
+    final fg = done ? scheme.onSurfaceVariant : Colors.white;
 
     final button = Material(
-      color: scheme.surface.withValues(alpha: done ? 0.6 : 0.85),
+      color: bg,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(Radii.sm),
-        side: BorderSide(color: border, width: kNextDesign ? 2.5 : 2),
+        side: done && !dark ? BorderSide(color: scheme.outlineVariant) : BorderSide.none,
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -55,7 +60,20 @@ class HomeworkBadge extends StatelessWidget {
         child: SizedBox(
           width: size,
           height: size,
-          child: Icon(done ? Icons.assignment_turned_in_rounded : Icons.assignment_late_rounded, size: 26, color: color),
+          child: Stack(alignment: Alignment.center, children: [
+            Icon(Icons.assignment_outlined, size: 26, color: fg),
+            if (done)
+              Positioned(
+                right: 5,
+                bottom: 5,
+                child: Container(
+                  width: 15,
+                  height: 15,
+                  decoration: BoxDecoration(color: scheme.onSurfaceVariant, shape: BoxShape.circle),
+                  child: Icon(Icons.check_rounded, size: 11, color: scheme.surface),
+                ),
+              ),
+          ]),
         ),
       ),
     );
@@ -76,18 +94,18 @@ class HomeworkBadge extends StatelessWidget {
               right: -6,
               child: IgnorePointer(
                 child: Container(
-                  constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                  constraints: const BoxConstraints(minWidth: 21, minHeight: 21),
                   padding: const EdgeInsets.symmetric(horizontal: 5),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: scheme.error,
-                    borderRadius: BorderRadius.circular(10),
+                    color: Color.lerp(homeworkRed, Colors.black, 0.32),
+                    borderRadius: BorderRadius.circular(11),
                     border: Border.all(color: scheme.surface, width: 2),
                   ),
                   child: Text(
                     count > 9 ? '9+' : '$count',
                     textScaler: TextScaler.noScaling,
-                    style: TextStyle(color: scheme.onError, fontSize: 12, fontWeight: FontWeight.w800, height: 1.1),
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800, height: 1.1),
                   ),
                 ),
               ),
@@ -109,7 +127,7 @@ class HomeworkInlineBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final done = homework.allDone;
-    final color = done ? scheme.onSurfaceVariant : scheme.error;
+    final color = done ? scheme.onSurfaceVariant : homeworkRed;
     return Semantics(
       button: true,
       label: homeworkBadgeLabel(homework),
@@ -121,7 +139,7 @@ class HomeworkInlineBadge extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
           child: Row(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(done ? Icons.assignment_turned_in_rounded : Icons.assignment_late_rounded, size: 24, color: color),
+            Icon(done ? Icons.assignment_turned_in_outlined : Icons.assignment_outlined, size: 24, color: color),
             if (!done && homework.open > 1)
               Padding(
                 padding: const EdgeInsets.only(left: Gap.xs),

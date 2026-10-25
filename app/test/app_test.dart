@@ -1260,7 +1260,7 @@ void main() {
 
       final badge = tester.widget<HomeworkBadge>(find.byType(HomeworkBadge));
       expect(badge.homework.allDone, isTrue);
-      expect(find.byIcon(Icons.assignment_turned_in_rounded), findsOneWidget);
+      expect(find.descendant(of: find.byType(HomeworkBadge), matching: find.byIcon(Icons.check_rounded)), findsOneWidget); // галочка на значке
       final sp = await SharedPreferences.getInstance();
       expect(sp.getStringList('groupHomeworkDone'), containsAll(['h1', 'b/ofo-1-bi-25']));
     });
