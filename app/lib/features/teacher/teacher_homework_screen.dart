@@ -33,7 +33,7 @@ class TeacherHomeworkScreen extends ConsumerWidget {
         illustration: IllustrationKind.groupHomework,
         title: 'Домашка студентам',
         subtitle: serverOn
-            ? 'Чтобы отправлять задания студентам ваших групп, введите код преподавателя. Код выдаёт автор приложения.'
+            ? 'Чтобы отправлять задания студентам ваших групп, введите код преподавателя. Код выдаёт автор приложения: напишите ему на unigraf95@gmail.com.'
             : 'Отправка ДЗ студентам сейчас недоступна: сервер не подключён.',
         action: serverOn
             ? FilledButton.icon(onPressed: () => showTeacherCodeDialog(context), icon: const Icon(Icons.vpn_key_rounded), label: const Text('Ввести код'))

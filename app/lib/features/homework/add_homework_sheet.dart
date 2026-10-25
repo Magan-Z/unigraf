@@ -293,6 +293,14 @@ class _AddHomeworkSheetState extends ConsumerState<_AddHomeworkSheet> {
                     limitText: 'До $_maxFiles шт., каждый до ${_maxBytes ~/ (1024 * 1024)} МБ',
                     onPressed: _files.length >= _maxFiles ? null : _attach,
                   ),
+                  if (_forGroup)
+                    Padding(
+                      padding: const EdgeInsets.only(top: Gap.sm),
+                      child: Text(
+                        'Файлы увидят все студенты группы. Не прикрепляйте ведомости, оценки и другие личные данные. Программы и скрипты (.exe, .apk и подобные) отправлять нельзя.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                    ),
                 ],
               ),
             ),

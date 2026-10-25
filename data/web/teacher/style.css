@@ -278,7 +278,10 @@ input[type=date] { font-variant-numeric: tabular-nums; }
   .field { margin-bottom: 12px; }
   label, legend { margin-bottom: 6px; }
   .link { min-height: 36px; padding: 6px 0; }
-  .chips { margin-bottom: 4px; }
+  .chips { gap: 6px; margin-bottom: 2px; }
+  .chip { min-height: 38px; padding-top: 3px; padding-bottom: 3px; }
+  .f-groups .link { min-height: 30px; padding: 2px 0; }
+  .f-files > .small { font-size: 12.5px; line-height: 1.35; }
   .f-body { display: flex; flex-direction: column; min-height: 0; }
   .f-body textarea { flex: 1; min-height: 72px; resize: none; }
   .counter { margin-top: 4px; }
@@ -288,7 +291,7 @@ input[type=date] { font-variant-numeric: tabular-nums; }
   .due { width: 184px; flex: none; }
   .due p { margin-top: 4px; }
   .f-files { margin-bottom: 8px; }
-  .f-files > .small { margin: 0; font-size: 13px; line-height: 1.4; }
+  .f-files > .small { margin: 0; }
   .drop { flex-direction: row; justify-content: center; gap: 14px; padding: 10px 16px; border-radius: 18px; }
   .drop-ic { display: none; }
   .drop-title { margin: 0; white-space: nowrap; }

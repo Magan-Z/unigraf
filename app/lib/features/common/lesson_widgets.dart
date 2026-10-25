@@ -181,10 +181,16 @@ class LessonTile extends ConsumerWidget {
 
     return Semantics(
       container: true,
-      label: '${timeLabel != null ? '$timeLabel, ' : ''}$subject, ${kind.title}'
-          '${room != null ? ', аудитория $room' : ''}${teacher != null ? ', $teacher' : ''}'
-          '${withGroups.isNotEmpty ? '. Вместе с группами: ${withGroups.join(', ')}' : ''}'
-          '${hasHomework ? '. Есть домашнее задание' : ''}${note != null ? '. $note' : ''}${footer != null ? '. $footer' : ''}',
+      label: joinSentences(
+        '${timeLabel != null ? '$timeLabel, ' : ''}$subject, ${kind.title}'
+        '${room != null ? ', аудитория $room' : ''}${teacher != null ? ', $teacher' : ''}',
+        [
+          if (withGroups.isNotEmpty) 'Вместе с группами: ${withGroups.join(', ')}',
+          if (hasHomework) 'Есть домашнее задание',
+          ?note,
+          ?footer,
+        ],
+      ),
       onTap: onTap,
       onLongPress: onLongPress,
       onLongPressHint: onLongPress == null ? null : 'Действия с парой',

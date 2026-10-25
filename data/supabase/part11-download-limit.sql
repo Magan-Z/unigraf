@@ -1,5 +1,5 @@
 -- Часть 11: потолок скачиваний считается на пару «файл + группа», сутки по Москве, очистка счётчиков при любом скачивании.
--- Меняет только функцию get_group_file (таблицы и права не трогает). Откат: выполнить прежнюю версию функции из git (коммит cecd219).
+-- Меняет только функции get_group_file, put_group_file и put_teacher_file (таблицы и права не трогает). Откат: выполнить прежнюю версию функции из git (коммит cecd219).
 -- Применять по слову владельца; сначала на тестовой копии.
 
 -- get_group_file: как в Части 6, плюс файлы из Storage (ссылка вместо base64, месячный потолок трафика 4,5 ГБ).
@@ -37,4 +37,41 @@ begin
   if total > 167772160 then raise exception 'download_limit'; end if;
   delete from public.download_day where day < d - 7;
   return jsonb_build_object('name', r.name, 'data', translate(encode(r.data, 'base64'), E'\n\r', ''));
+end $$;
+
+-- Часть 11 (продолжение): программы и скрипты нельзя прикреплять и старосте, и по старому пути преподавателя
+-- (раньше список запрещённых типов проверялся только в register_teacher_file). Таблицы и права не меняются.
+
+create or replace function public.put_group_file(p_token text, p_id uuid, p_name text, p_data text) returns void
+language plpgsql security definer set search_path = '' set statement_timeout = '25s' as $$
+declare g text := public.editor_group(p_token); bytes bytea; used bigint;
+begin
+  if lower(coalesce(p_name, '')) ~ '\.(exe|apk|bat|cmd|com|msi|scr|js|jse|vbs|vbe|wsf|ps1|sh|jar|dll|lnk|reg|hta|cpl)$' then raise exception 'bad_file_type'; end if;
+  if length(p_data) > 11500000 then raise exception 'file_too_big'; end if;
+  bytes := decode(p_data, 'base64');
+  if octet_length(bytes) > 8388608 or octet_length(bytes) = 0 then raise exception 'file_too_big'; end if;
+  perform public.purge_group_files(g);
+  select coalesce(sum(size), 0) into used from public.group_files where group_id = g;
+  if used + octet_length(bytes) > 157286400 then raise exception 'quota'; end if;
+  insert into public.group_files (id, group_id, name, size, data)
+  values (p_id, g, left(p_name, 200), octet_length(bytes), bytes)
+  on conflict (id) do nothing;
+end $$;
+
+create or replace function public.put_teacher_file(p_token text, p_id uuid, p_name text, p_data text) returns void
+language plpgsql security definer set search_path = '' set statement_timeout = '25s' as $$
+declare t public.teacher_codes%rowtype; g text; bytes bytea; used bigint;
+begin
+  if lower(coalesce(p_name, '')) ~ '\.(exe|apk|bat|cmd|com|msi|scr|js|jse|vbs|vbe|wsf|ps1|sh|jar|dll|lnk|reg|hta|cpl)$' then raise exception 'bad_file_type'; end if;
+  t := public.teacher_row(p_token);
+  g := 'teacher-' || substr(md5(lower(t.teacher)), 1, 8);
+  if length(p_data) > 11500000 then raise exception 'file_too_big'; end if;
+  bytes := decode(p_data, 'base64');
+  if octet_length(bytes) > 8388608 or octet_length(bytes) = 0 then raise exception 'file_too_big'; end if;
+  perform public.purge_teacher_files(g);
+  select coalesce(sum(size), 0) into used from public.group_files where group_id = g;
+  if used + octet_length(bytes) > 157286400 then raise exception 'quota'; end if;
+  insert into public.group_files (id, group_id, name, size, data)
+  values (p_id, g, left(p_name, 200), octet_length(bytes), bytes)
+  on conflict (id) do nothing;
 end $$;

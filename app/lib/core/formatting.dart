@@ -84,3 +84,12 @@ DateTime? scheduleDate(String? version) {
   final d = DateTime.tryParse(version.substring(0, 10));
   return d == null ? null : DateTime.utc(d.year, d.month, d.day);
 }
+
+/// Склеивает подпись для экранной читалки: «Кутаев А.Х.» и «Вместе с группами» → «Кутаев А.Х. Вместе с группами» (без двойной точки).
+String joinSentences(String first, Iterable<String> rest) {
+  var out = first;
+  for (final r in rest) {
+    out += '${out.endsWith('.') ? ' ' : '. '}$r';
+  }
+  return out;
+}

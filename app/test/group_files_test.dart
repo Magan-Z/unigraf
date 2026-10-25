@@ -110,6 +110,23 @@ void main() {
       expect(backend.files, isEmpty); // ничего лишнего на сервер не ушло
     });
 
+    test('программы и скрипты не отправляются ни старостой, ни преподавателем; обычные файлы проходят', () async {
+      for (final name in ['setup.apk', 'Игра.EXE', 'run.sh', 'x.js']) {
+        final bad = await local(name, [1, 2, 3]);
+        for (final teacher in [false, true]) {
+          await expectLater(
+            service.upload('tok', [bad], () => 'x', teacher: teacher),
+            throwsA(isA<SharedApiException>().having((e) => e.code, 'code', 'bad_file_type')),
+            reason: '$name, преподаватель: $teacher',
+          );
+        }
+      }
+      expect(backend.files, isEmpty);
+      final ok = await local('лекция.pdf', [1, 2, 3]);
+      final up = await service.upload('tok', [ok], () => 'ok-1');
+      expect(up.refs.single.name, 'лекция.pdf');
+    });
+
     test('скачивание: первый раз с сервера, второй раз из телефона', () async {
       backend.files['f1'] = (name: 'Лекция.pdf', bytes: [9, 8, 7]);
       const ref = GroupFileRef(id: 'f1', name: 'Лекция.pdf', size: 3);

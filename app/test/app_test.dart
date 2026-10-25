@@ -469,6 +469,33 @@ void main() {
       expect(find.text('ЧТК и этика'), findsNothing); // у всех (и у самого старосты) пары нет
     });
 
+    testWidgets('предупреждение про личные данные в файлах показывается только когда ДЗ идёт всей группе', (tester) async {
+      final backend = FakeBackend(hash: groupHash());
+      await _start(tester, prefs: {...profile, 'editorToken': 'tok-GOODCODE', 'editorGroup': 'ofo-1-bi-25'}, sharedApi: backend.api());
+      await _settle(tester);
+
+      await tester.longPress(find.text('ЧТК и этика').last);
+      await _settle(tester);
+      await tester.tap(find.text('Добавить ДЗ'));
+      await _settle(tester);
+      final warning = find.textContaining('Не прикрепляйте ведомости');
+      await tester.ensureVisible(find.text('Для всей группы'));
+      await tester.tap(find.text('Для всей группы')); // у старосты выключен или включён по умолчанию — приводим к «включено»
+      await _settle(tester);
+      bool on() => tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, 'Для всей группы')).value;
+      if (!on()) {
+        await tester.tap(find.text('Для всей группы'));
+        await _settle(tester);
+      }
+      expect(on(), isTrue);
+      await tester.ensureVisible(warning);
+      expect(warning, findsOneWidget);
+      await tester.tap(find.text('Для всей группы'));
+      await _settle(tester);
+      expect(on(), isFalse);
+      expect(warning, findsNothing);
+    });
+
     testWidgets('староста задаёт ДЗ для всей группы: уходит на сервер и появляется во вкладке «Староста»', (tester) async {
       final backend = FakeBackend(hash: groupHash());
       await _start(tester, prefs: {...profile, 'editorToken': 'tok-GOODCODE', 'editorGroup': 'ofo-1-bi-25'}, sharedApi: backend.api());

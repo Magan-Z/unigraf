@@ -665,7 +665,7 @@ class _TeacherSection extends ConsumerWidget {
         _Row(
           icon: Icons.vpn_key_rounded,
           title: 'Ввести код преподавателя',
-          subtitle: 'С кодом можно отправлять ДЗ студентам. Код выдаёт автор приложения',
+          subtitle: 'С кодом можно отправлять ДЗ студентам. Код выдаёт автор приложения (unigraf95@gmail.com)',
           onTap: () async {
             final got = await showTeacherCodeDialog(context);
             if (got == null || !context.mounted) return;

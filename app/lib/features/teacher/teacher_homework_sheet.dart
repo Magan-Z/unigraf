@@ -336,6 +336,13 @@ class _TeacherHomeworkSheetState extends ConsumerState<_TeacherHomeworkSheet> {
                     limitText: 'До $maxGroupFilesPerHomework шт., каждый до ${maxTeacherFileBytes ~/ (1024 * 1024)} МБ',
                     onPressed: fileCount >= maxGroupFilesPerHomework || _busy ? null : _attach,
                   ),
+                                      Padding(
+                      padding: const EdgeInsets.only(top: Gap.sm),
+                      child: Text(
+                        'Файлы увидят все студенты группы. Не прикрепляйте ведомости, оценки и другие личные данные. Программы и скрипты (.exe, .apk и подобные) отправлять нельзя.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                    ),
                 ],
               ),
             ),

@@ -549,10 +549,15 @@ class _LessonRow extends ConsumerWidget {
 
     return Semantics(
       container: true,
-      label: '${moscowTimeText(l.startAt)}–${moscowTimeText(l.endAt)}, ${l.pair} пара, ${l.subject}, ${l.kind.title}'
-          '${room != null ? ', аудитория $room' : ''}${teacher != null ? ', $teacher' : ''}'
-          '${l.withGroups.isNotEmpty ? '. Вместе с группами: ${l.withGroups.join(', ')}' : ''}'
-          '${hasHomework ? '. Есть домашнее задание' : ''}${note != null ? '. $note' : ''}',
+      label: joinSentences(
+        '${moscowTimeText(l.startAt)}–${moscowTimeText(l.endAt)}, ${l.pair} пара, ${l.subject}, ${l.kind.title}'
+        '${room != null ? ', аудитория $room' : ''}${teacher != null ? ', $teacher' : ''}',
+        [
+          if (l.withGroups.isNotEmpty) 'Вместе с группами: ${l.withGroups.join(', ')}',
+          if (hasHomework) 'Есть домашнее задание',
+          ?note,
+        ],
+      ),
       onTap: () => showLessonActions(context, l),
       onLongPress: () => showLessonActions(context, l),
       onLongPressHint: 'Действия с парой',

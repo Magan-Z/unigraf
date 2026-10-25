@@ -18,7 +18,7 @@ const maxGroupFileBytes = 8 * 1024 * 1024; // староста: файл леж�
 const maxTeacherFileBytes = 15 * 1024 * 1024;
 const maxGroupFilesPerHomework = 5;
 
-// Программы и скрипты преподаватель отправлять не может (так же проверяет сервер)
+// Программы и скрипты не отправляет никто, ни преподаватель, ни староста (так же проверяет сервер)
 final _blockedFile = RegExp(r'\.(exe|apk|bat|cmd|com|msi|scr|js|jse|vbs|vbe|wsf|ps1|sh|jar|dll|lnk|reg|hta|cpl)$');
 
 class GroupFiles {
@@ -93,7 +93,7 @@ class GroupFiles {
       final bytes = await store.readBytes(a);
       if (bytes == null) throw const SharedApiException('server', 'файл не найден в памяти телефона');
       if (bytes.length > limit) throw const SharedApiException('file_too_big');
-      if (teacher && _blockedFile.hasMatch(a.name.toLowerCase())) throw const SharedApiException('bad_file_type');
+      if (_blockedFile.hasMatch(a.name.toLowerCase())) throw const SharedApiException('bad_file_type');
       loaded.add((a, bytes));
     }
     String? ticket;
