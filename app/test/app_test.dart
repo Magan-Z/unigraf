@@ -9,6 +9,7 @@ import 'dart:io';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
+import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:unigraf/data/remote/shared_api.dart';
@@ -1246,6 +1247,19 @@ void main() {
       expect(find.text('Преподаватель'), findsOneWidget);
       expect(find.text('Староста'), findsOneWidget);
       expect(find.text('Мои'), findsOneWidget);
+    });
+
+    testWidgets('значок ДЗ доступен читалке экрана отдельной кнопкой и открывает окно (а не меню пары)', (tester) async {
+      final handle = tester.ensureSemantics();
+      await startWithThreeSources(tester);
+      final badge = find.bySemanticsLabel(RegExp(r'Домашнее задание: 3 задания'));
+      expect(badge, findsOneWidget);
+      // нажатие именно по «семантическому» узлу: у значка он свой, а не у карточки (так делает читалка экрана и веб с включённой доступностью)
+      tester.binding.pipelineOwner.semanticsOwner!.performAction(tester.getSemantics(badge).id, SemanticsAction.tap);
+      await _settle(tester);
+      expect(find.textContaining('ДЗ на 7 октября'), findsOneWidget);
+      expect(find.text('Действия с парой'), findsNothing);
+      handle.dispose();
     });
 
     testWidgets('«Всё выполнено» отмечает все три: значок становится серым с галочкой, а ДЗ старосты помнится в телефоне', (tester) async {

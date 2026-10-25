@@ -28,7 +28,7 @@ class HomeworkBadge extends StatelessWidget {
 
   /// Область нажатия: не меньше 44 dp, чтобы попадать одним пальцем. Сама плитка чуть меньше.
   static const double size = 44;
-  static const double visual = 40;
+  static const double visual = 38;
 
   /// Отступы области нажатия от верхнего и правого края карточки (плитка от краёв на 2 dp дальше).
   static const double top = 8;
@@ -52,7 +52,7 @@ class HomeworkBadge extends StatelessWidget {
     final tile = Material(
       color: bg,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(11),
+        borderRadius: BorderRadius.circular(10),
         side: done && !dark ? BorderSide(color: scheme.outlineVariant) : BorderSide.none,
       ),
       clipBehavior: Clip.antiAlias,
@@ -62,7 +62,7 @@ class HomeworkBadge extends StatelessWidget {
           width: visual,
           height: visual,
           child: Stack(alignment: Alignment.center, children: [
-            HomeworkIcon(color: fg, size: 27),
+            HomeworkIcon(color: fg, size: 25),
             if (done)
               Positioned(
                 right: 4,

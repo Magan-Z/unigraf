@@ -19,9 +19,10 @@ import 'usage_ping.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // В браузере доступность Flutter по умолчанию выключена, пока человек не нажмёт скрытую кнопку «Enable accessibility»;
-  // VoiceOver на iPhone её не находит. Включаем сразу, чтобы экранные читалки видели подписи элементов.
-  if (kIsWeb) SemanticsBinding.instance.ensureSemantics();
+  // В браузере доступность Flutter по умолчанию выключена, пока человек не нажмёт скрытую кнопку «Enable accessibility».
+  // Включать её сразу для всех рискованно (в тестовой версии из-за этого значки на карточках перестали нажиматься),
+  // поэтому сейчас она включается только по адресу …/app/?a11y=1; решение по умолчанию — после проверки на iPhone с VoiceOver.
+  if (kIsWeb && Uri.base.queryParameters['a11y'] == '1') SemanticsBinding.instance.ensureSemantics();
   final prefs = await SharedPreferences.getInstance();
   // Раз в ~6 часов проверяет обновления, даже когда приложение закрыто (только Android; в браузере такого нет)
   if (!kIsWeb) registerBackgroundSync();

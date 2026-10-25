@@ -1,7 +1,6 @@
 // Карточка пары: название, тип, преподаватель и «табличка» с аудиторией. Цвета — по предмету.
 
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app_state.dart';
@@ -165,7 +164,7 @@ class LessonTile extends ConsumerWidget {
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
                           alignment: Alignment.centerRight,
-                          child: RoomPlate(room: room!, tone: tone, size: 28, pop: kNextDesign && note != null),
+                          child: RoomPlate(room: room!, tone: tone, size: 25, pop: kNextDesign && note != null),
                         ),
                       ),
                     ],
@@ -192,18 +191,12 @@ class LessonTile extends ConsumerWidget {
               ),
             ),
             ]),
-            if (!homework.isEmpty && onHomework != null)
-              Positioned(
-                top: HomeworkBadge.top,
-                right: HomeworkBadge.right,
-                child: HomeworkBadge(homework: homework, onPressed: onHomework!),
-              ),
           ]),
         ),
       ),
     );
 
-    return Semantics(
+    final tile = Semantics(
       container: true,
       label: joinSentences(
         '${timeLabel != null ? '$timeLabel, ' : ''}$subject, ${kind.title}'
@@ -218,10 +211,6 @@ class LessonTile extends ConsumerWidget {
       onTap: onTap,
       onLongPress: onLongPress,
       onLongPressHint: onLongPress == null ? null : 'Действия с парой',
-      // Значок ДЗ спрятан от читалки вместе с остальной карточкой, поэтому его нажатие доступно отдельным действием
-      customSemanticsActions: {
-        if (!homework.isEmpty && onHomework != null) const CustomSemanticsAction(label: 'Открыть домашнее задание'): onHomework!,
-      },
       child: ExcludeSemantics(
         child: AnimatedOpacity(
           opacity: dimmed ? 0.55 : 1,
@@ -232,6 +221,18 @@ class LessonTile extends ConsumerWidget {
         ),
       ),
     );
+
+    // Значок ДЗ лежит поверх карточки отдельным слоем (не внутри неё): у него своё нажатие и своя подпись для читалки,
+    // а в веб-версии с включённой доступностью нажатие не уходит в саму карточку.
+    if (homework.isEmpty || onHomework == null) return tile;
+    return Stack(fit: StackFit.passthrough, children: [
+      tile,
+      Positioned(
+        top: HomeworkBadge.top,
+        right: HomeworkBadge.right,
+        child: HomeworkBadge(homework: homework, onPressed: onHomework!),
+      ),
+    ]);
   }
 }
 
