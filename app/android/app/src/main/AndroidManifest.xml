@@ -9,7 +9,9 @@
     <!-- Камера нужна только для сканирования QR при входе на компьютере (режим преподавателя); камеры может не быть -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <!-- Резервная копия выключена: в настройках приложения лежат коды доступа старосты и преподавателя, в облако Google им попадать незачем -->
     <application
+        android:allowBackup="false"
         android:label="UniGraf"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">

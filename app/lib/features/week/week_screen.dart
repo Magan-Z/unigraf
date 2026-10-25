@@ -193,30 +193,48 @@ class _WeekBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    // При крупном системном шрифте (от ×1,3) переключатель недель не помещается рядом с заголовком:
+    // он уходит под него на всю ширину, а подпись «сейчас» остаётся только в заголовке.
+    final large = MediaQuery.textScalerOf(context).scale(10) >= 13;
+    final title = Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+      FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text('Неделя', style: theme.textTheme.headlineSmall, maxLines: 1)),
+      FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Text(range, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant), maxLines: 1),
+      ),
+    ]);
+    final toggle = SlidingSegments<int>(
+      proportional: true,
+      segments: [
+        Segment(1, currentWeek == 1 && !large ? '1 неделя · сейчас' : '1 неделя'),
+        Segment(2, currentWeek == 2 && !large ? '2 неделя · сейчас' : '2 неделя'),
+      ],
+      selected: selected,
+      onChanged: onChanged,
+    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.md, Gap.lg, Gap.md),
-      child: Row(children: [
-        Expanded(
-          flex: 3,
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            Text('Неделя', style: theme.textTheme.headlineSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
-            Text(range, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis),
-          ]),
-        ),
-        const SizedBox(width: Gap.md),
-        Expanded(
-          flex: 5,
-          child: SlidingSegments<int>(
-            proportional: true,
-            segments: [
-              Segment(1, currentWeek == 1 ? '1 неделя · сейчас' : '1 неделя'),
-              Segment(2, currentWeek == 2 ? '2 неделя · сейчас' : '2 неделя'),
-            ],
-            selected: selected,
-            onChanged: onChanged,
-          ),
-        ),
-      ]),
+      child: large
+          ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(children: [
+                Expanded(child: title),
+                const SizedBox(width: Gap.sm),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('сейчас $currentWeek неделя', maxLines: 1, style: theme.textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: Gap.sm),
+              toggle,
+            ])
+          : Row(children: [
+              Expanded(flex: 3, child: title),
+              const SizedBox(width: Gap.md),
+              Expanded(flex: 5, child: toggle),
+            ]),
     );
   }
 }
@@ -314,11 +332,15 @@ class _DayHeaderDelegate extends SliverPersistentHeaderDelegate {
                     child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Row(children: [
                         Flexible(
-                          child: Text(weekdayTitles[day.weekday],
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              // Название дня — главный заголовок карточки: крупнее и жирнее предметов внутри
-                              style: theme.textTheme.titleLarge?.copyWith(color: fg, fontWeight: FontWeight.w800, letterSpacing: -0.2, height: 1.15)),
+                          // Название дня сжимается по ширине, а не обрезается до «По…» (при крупном системном шрифте)
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(weekdayTitles[day.weekday],
+                                maxLines: 1,
+                                // Название дня — главный заголовок карточки: крупнее и жирнее предметов внутри
+                                style: theme.textTheme.titleLarge?.copyWith(color: fg, fontWeight: FontWeight.w800, letterSpacing: -0.2, height: 1.15)),
+                          ),
                         ),
                         if (isToday && !narrow) ...[
                           const SizedBox(width: Gap.sm),
@@ -329,7 +351,11 @@ class _DayHeaderDelegate extends SliverPersistentHeaderDelegate {
                           ),
                         ],
                       ]),
-                      Text.rich(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: (narrow ? theme.textTheme.bodySmall : theme.textTheme.bodyMedium)?.copyWith(color: soft)),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text.rich(subtitle, maxLines: 1, style: (narrow ? theme.textTheme.bodySmall : theme.textTheme.bodyMedium)?.copyWith(color: soft)),
+                      ),
                     ]),
                   ),
                   if (!empty) ...[
@@ -450,13 +476,23 @@ class _LessonRow extends ConsumerWidget {
             // Приглушается только содержимое (прошедшие дни), а не фон карточки: иначе карточка выглядит двухцветной
             child: Opacity(
               opacity: dimmed ? 0.6 : 1,
-              child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-              SizedBox(
-                width: 50,
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(moscowTimeText(l.startAt), style: theme.textTheme.titleSmall?.copyWith(color: tone.onContainer, fontWeight: FontWeight.w800)),
-                  Text(moscowTimeText(l.endAt), style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-                ]),
+              child: LayoutBuilder(builder: (context, box) {
+                final timeCap = box.maxWidth.isFinite ? (box.maxWidth * 0.3).clamp(50.0, 140.0) : 140.0;
+                return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+              // Колонка времени по ширине самого текста: при крупном шрифте «09:00» не рвётся на «09:/00».
+              // Но не шире трети строки: в самом тесном случае время чуть сжимается, а не выталкивает остальное за край.
+              ConstrainedBox(
+                constraints: BoxConstraints(minWidth: 50, maxWidth: timeCap),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(moscowTimeText(l.startAt),
+                        maxLines: 1, softWrap: false, style: theme.textTheme.titleSmall?.copyWith(color: tone.onContainer, fontWeight: FontWeight.w800)),
+                    Text(moscowTimeText(l.endAt),
+                        maxLines: 1, softWrap: false, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                  ]),
+                ),
               ),
               const SizedBox(width: Gap.md),
               Expanded(
@@ -477,13 +513,16 @@ class _LessonRow extends ConsumerWidget {
                   const SizedBox(height: 5),
                   Wrap(spacing: Gap.sm, runSpacing: Gap.xs, crossAxisAlignment: WrapCrossAlignment.center, children: [
                     KindBadge(l.kind, tone: tone),
-                    if (teacher != null) Text(teacher, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                    if (teacher != null) WordFitText(teacher, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
                     if (l.withGroups.isNotEmpty)
-                      Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.groups_rounded, size: 15, color: scheme.onSurfaceVariant),
-                        const SizedBox(width: 2),
-                        Text('+${l.withGroups.length}', style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
-                      ]),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.groups_rounded, size: 15, color: scheme.onSurfaceVariant),
+                          const SizedBox(width: 2),
+                          Text('+${l.withGroups.length}', style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+                        ]),
+                      ),
                   ]),
                   if (note != null)
                     Padding(
@@ -500,7 +539,8 @@ class _LessonRow extends ConsumerWidget {
                 const SizedBox(width: Gap.sm),
                 _RoomChip(room: room, tone: tone),
               ],
-            ]),
+            ]);
+              }),
             ),
           ),
         ]),

@@ -17,12 +17,20 @@ List<ResolvedLesson> resolve(
 }) {
   final day = dayOnly(date);
 
-  // 1. Воскресенье, праздник или день вне семестра — пар нет
-  if (day.weekday == DateTime.sunday ||
-      index.holidays.contains(day) ||
-      day.isBefore(index.semesterStart) ||
-      day.isAfter(index.semesterEnd)) {
-    return [];
+  // 1. Воскресенье или праздник — пар нет
+  if (day.weekday == DateTime.sunday || index.holidays.contains(day)) return [];
+
+  // Вне семестра (сессия, каникулы) расписания нет, но видны занятия, добавленные на конкретную дату:
+  // например, экзамен или зачёт, который объявил староста. Повторы «каждую неделю» за пределы семестра не уходят.
+  if (day.isBefore(index.semesterStart) || day.isAfter(index.semesterEnd)) {
+    final result = <ResolvedLesson>[];
+    final week = forcedWeek ?? weekNumber(day, index.weekAnchor);
+    for (final group in [true, false]) {
+      final layer = [for (final o in overrides) if (o.fromGroup == group && o.type == OverrideType.add && !o.repeatWeekly) o];
+      _applyOverrides(result, layer, day, index, week, group: group);
+    }
+    result.sort((a, b) => a.pair.compareTo(b.pair));
+    return result;
   }
 
   final week = forcedWeek ?? weekNumber(day, index.weekAnchor);

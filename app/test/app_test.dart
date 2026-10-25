@@ -8,6 +8,7 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:unigraf/data/remote/shared_api.dart';
@@ -1171,6 +1172,52 @@ void main() {
       final problem = tester.takeException();
       if (problem != null) fail('вкладка «$tab» ломается при крупном шрифте: $problem');
     }
+  });
+
+  testWidgets('«Неделя» при шрифте ×1,6 на 360 dp: время пары и название дня не рвутся', (tester) async {
+    await tester.runAsync(() async {
+      final loader = FontLoader('Onest')..addFont(Future.value(ByteData.sublistView(File('assets/fonts/Onest.ttf').readAsBytesSync())));
+      await loader.load();
+    });
+    await _start(tester, prefs: profile);
+    tester.view.physicalSize = const Size(360, 780);
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await _settle(tester);
+
+    await tester.tap(find.text('Неделя').last);
+    await _settle(tester);
+    expect(tester.takeException(), isNull);
+
+    // сколько строк занял текст: у перенесённого слова прямоугольников выделения больше одного
+    int lines(Finder f) {
+      final p = tester.renderObject<RenderParagraph>(f);
+      return p.getBoxesForSelection(TextSelection(baseOffset: 0, extentOffset: p.text.toPlainText().length)).length;
+    }
+
+    final times = find.byWidgetPredicate((w) => w is Text && RegExp(r'^\d\d:\d\d$').hasMatch(w.data ?? ''));
+    expect(times, findsWidgets);
+    for (var i = 0; i < times.evaluate().length; i++) {
+      expect(lines(times.at(i)), 1, reason: 'время №$i перенеслось на вторую строку');
+    }
+    // название дня целиком (сжимается, но не обрезается многоточием)
+    final monday = find.text('Понедельник');
+    expect(monday, findsWidgets);
+    final para = tester.renderObject<RenderParagraph>(monday.first);
+    expect(para.didExceedMaxLines, isFalse);
+    // переключатель недель под заголовком, на всю ширину: обе подписи видны без «· сейчас»
+    expect(find.text('1 неделя'), findsOneWidget);
+    expect(find.text('2 неделя'), findsOneWidget);
+  });
+
+  testWidgets('После конца семестра «Сегодня» говорит, что семестр закончился, и не показывает номер недели', (tester) async {
+    await _start(tester, prefs: profile, now: DateTime.utc(2027, 1, 15, 10)); // 15 января 2027, семестр шёл до 26 декабря
+    await _settle(tester);
+    expect(find.text('Семестр закончился'), findsWidgets);
+    expect(find.text('Вне семестра'), findsOneWidget);
+    expect(find.textContaining('неделя'), findsNothing);
+    expect(find.text('Свободный день'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Крупный шрифт (×2): поиск преподавателя с длинным полным ФИО и режимы поиска не ломаются', (tester) async {

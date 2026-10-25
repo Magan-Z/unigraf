@@ -102,8 +102,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
 
         final shownLessons =
             resolve(shownDay, data.index, data.schedule, data.profile, overrides: data.overrides, forcedWeek: data.forcedWeek);
+        final afterSemester = shownDay.isAfter(data.index.semesterEnd);
+        final beforeSemester = shownDay.isBefore(data.index.semesterStart);
         final summary = shownLessons.isEmpty
-            ? 'Свободный день'
+            ? (afterSemester ? 'Семестр закончился' : beforeSemester ? 'Семестр ещё не начался' : 'Свободный день')
             : '${shownLessons.length} ${plural(shownLessons.length, 'пара', 'пары', 'пар')} · ${moscowTimeText(shownLessons.first.startAt)}–${moscowTimeText(shownLessons.last.endAt)}';
 
         return Column(
@@ -111,7 +113,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             _Header(
               summary: summary,
               day: shownDay,
-              week: data.weekFor(shownDay),
+              week: afterSemester || beforeSemester ? null : data.weekFor(shownDay),
               isToday: shownDay == today,
               onToday: () => _goTo(today),
               onPrevious: () => _controller.previousPage(duration: Motion.of(context, Motion.base), curve: Motion.enter),
@@ -153,7 +155,7 @@ class _Header extends StatelessWidget {
   });
   final String summary; // «3 пары · 09:00–14:30»
   final DateTime day;
-  final int week;
+  final int? week; // null — день вне семестра, номер недели не показываем
   final bool isToday;
   final VoidCallback onToday;
   final VoidCallback onPrevious;
@@ -173,7 +175,7 @@ class _Header extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.xs),
                   decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(999)),
-                  child: Text('$week неделя', style: theme.textTheme.labelMedium?.copyWith(color: scheme.onPrimaryContainer)),
+                  child: Text(week == null ? 'Вне семестра' : '$week неделя', style: theme.textTheme.labelMedium?.copyWith(color: scheme.onPrimaryContainer)),
                 ),
                 if (!isToday)
                   TextButton.icon(
@@ -230,6 +232,8 @@ class _DayPage extends ConsumerWidget {
     if (lessons.isEmpty) {
       final holiday = data.index.holidays.contains(day);
       final sunday = day.weekday == DateTime.sunday;
+      final over = !holiday && day.isAfter(data.index.semesterEnd);
+      final notStarted = !holiday && day.isBefore(data.index.semesterStart);
       return RefreshIndicator(
         onRefresh: refresh,
         child: LayoutBuilder(
@@ -241,8 +245,21 @@ class _DayPage extends ConsumerWidget {
                 child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                   EmptyState(
                     illustration: holiday ? IllustrationKind.holiday : IllustrationKind.freeDay,
-                    title: holiday ? 'Праздничный день' : 'Пар нет',
-                    subtitle: sunday ? 'Воскресенье — отдыхаем' : 'Можно заняться своими делами',
+                    title: holiday
+                        ? 'Праздничный день'
+                        : over
+                            ? 'Семестр закончился'
+                            : notStarted
+                                ? 'Семестр ещё не начался'
+                                : 'Пар нет',
+                    subtitle: over
+                        ? 'Он шёл до ${dateText(data.index.semesterEnd)}. Новое расписание появится, когда институт его опубликует. '
+                            'Зачёты и экзамены, которые добавит староста, будут здесь, а домашние задания остаются во вкладке «ДЗ».'
+                        : notStarted
+                            ? 'Расписание начнёт действовать ${dateText(data.index.semesterStart)}.'
+                            : sunday
+                                ? 'Воскресенье — отдыхаем'
+                                : 'Можно заняться своими делами',
                     action: ref.watch(isTeacherModeProvider) ? null : _EditsButton(day: day, count: editsCount),
                   ),
                   const SizedBox(height: Gap.md),

@@ -1,6 +1,7 @@
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsBinding;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -18,6 +19,9 @@ import 'usage_ping.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // В браузере доступность Flutter по умолчанию выключена, пока человек не нажмёт скрытую кнопку «Enable accessibility»;
+  // VoiceOver на iPhone её не находит. Включаем сразу, чтобы экранные читалки видели подписи элементов.
+  if (kIsWeb) SemanticsBinding.instance.ensureSemantics();
   final prefs = await SharedPreferences.getInstance();
   // Раз в ~6 часов проверяет обновления, даже когда приложение закрыто (только Android; в браузере такого нет)
   if (!kIsWeb) registerBackgroundSync();

@@ -65,7 +65,12 @@ jobs:
 
       - name: Сборка
         run: |
+          # Системная версия (видна в «Настройки → Приложения») и номер сборки, который только растёт (нужен магазинам приложений).
+          # Ручной запуск не с тега (ветка main) получает версию 0.0.0, чтобы сборка не падала.
+          NAME="${GITHUB_REF_NAME#v}"
+          if ! [[ "$NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then NAME="0.0.0"; fi
           flutter build apk --release --target-platform android-arm64 \
+            --build-name="$NAME" --build-number=${{ github.run_number }} \
             --dart-define=SCHEDULE_BASE_URL=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ \
             --dart-define=APP_VERSION=${GITHUB_REF_NAME#v}
 
