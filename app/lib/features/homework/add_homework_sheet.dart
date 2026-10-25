@@ -10,6 +10,8 @@ import '../../data/attachments/attachment_store.dart';
 import '../../data/attachments/group_files.dart';
 import '../../domain/attachment.dart';
 import '../teacher/teacher_homework_sheet.dart';
+import '../../domain/lesson_homework.dart';
+import 'duplicate_hint.dart';
 import 'homework_form_widgets.dart';
 import '../../core/formatting.dart';
 import '../../domain/homework.dart';
@@ -188,6 +190,9 @@ class _AddHomeworkSheetState extends ConsumerState<_AddHomeworkSheet> {
     final subjects = subjectsOf(data.schedule, data.profile);
     final due = _due(data, today);
     final canSave = _subject != null && _text.text.trim().isNotEmpty && due != null;
+    final existing = _subject == null || due == null
+        ? const <HomeworkItem>[]
+        : alreadyAssigned(ref.watch(homeworkWithGroupProvider).value ?? const <HomeworkItem>[], subject: _subject!, due: due, kind: _kind);
 
     final dropdownTheme = InputDecorationTheme(filled: false, border: OutlineInputBorder(borderRadius: BorderRadius.circular(Radii.sm)));
     return Padding(
@@ -252,6 +257,8 @@ class _AddHomeworkSheetState extends ConsumerState<_AddHomeworkSheet> {
                       if (picked != null) setState(() => _manualDue = DateTime.utc(picked.year, picked.month, picked.day));
                     },
                   ),
+                  // Уже есть задание на этот предмет и срок (от преподавателя, старосты или ваше): подсказываем, но не запрещаем
+                  if (existing.isNotEmpty) DuplicateHint(items: existing, onSkip: () => Navigator.of(context).pop()),
                   if (ref.watch(isGroupEditorProvider)) ...[
                     const SizedBox(height: Gap.md),
                     SwitchListTile(

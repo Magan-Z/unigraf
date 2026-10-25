@@ -360,6 +360,26 @@ class RequestedDayNotifier extends Notifier<DateTime?> {
   void clear() => state = null;
 }
 
+/// Запрос открыть вкладку главного экрана (0 «Сегодня», 1 «Неделя», 2 «ДЗ»…): например, со значка ДЗ на паре.
+class RequestedTabNotifier extends Notifier<int?> {
+  @override
+  int? build() => null;
+  void request(int tab) => state = tab;
+  void clear() => state = null;
+}
+
+final requestedTabProvider = NotifierProvider<RequestedTabNotifier, int?>(RequestedTabNotifier.new);
+
+/// Запрос показать на вкладке «ДЗ» раздел нужного источника (Мои, Староста, Преподаватели).
+class RequestedHomeworkSourceNotifier extends Notifier<HomeworkSource?> {
+  @override
+  HomeworkSource? build() => null;
+  void request(HomeworkSource source) => state = source;
+  void clear() => state = null;
+}
+
+final requestedHomeworkSourceProvider = NotifierProvider<RequestedHomeworkSourceNotifier, HomeworkSource?>(RequestedHomeworkSourceNotifier.new);
+
 final requestedDayProvider = NotifierProvider<RequestedDayNotifier, DateTime?>(RequestedDayNotifier.new);
 
 // ---------- свои названия и цвета предметов ----------
@@ -472,12 +492,22 @@ final homeworkWithGroupProvider = FutureProvider<List<HomeworkItem>>((ref) async
   // Преподавателю личные ДЗ студента не показываем (ни на виджетах, ни в напоминаниях)
   if (ref.watch(isTeacherModeProvider)) return const [];
   final personal = await ref.watch(homeworkProvider.future);
-  final group = [...ref.watch(groupHomeworkProvider), ...ref.watch(teacherHomeworkProvider)];
   final done = ref.watch(groupHomeworkDoneProvider);
+  HomeworkItem shared(GroupHomeworkRow g, HomeworkSource source) => HomeworkItem(
+        subject: g.subject,
+        text: g.text,
+        dueDate: g.dueDate,
+        kind: g.kind,
+        done: done.contains(g.id),
+        createdAt: g.dueDate,
+        source: source,
+        sharedId: g.id,
+        author: g.author,
+      );
   return [
     ...personal,
-    for (final g in group)
-      HomeworkItem(subject: g.subject, text: g.text, dueDate: g.dueDate, kind: g.kind, done: done.contains(g.id), createdAt: g.dueDate),
+    for (final g in ref.watch(groupHomeworkProvider)) shared(g, HomeworkSource.headman),
+    for (final g in ref.watch(teacherHomeworkProvider)) shared(g, HomeworkSource.teacher),
   ];
 });
 

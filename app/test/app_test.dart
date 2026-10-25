@@ -15,7 +15,11 @@ import 'package:unigraf/data/remote/shared_api.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:unigraf/domain/homework.dart';
+import 'package:unigraf/domain/homework_due.dart';
+import 'package:unigraf/domain/models.dart';
 import 'package:unigraf/domain/notification_plan.dart';
+import 'package:unigraf/features/common/homework_badge.dart';
 import 'package:unigraf/app_state.dart';
 import 'package:unigraf/core/clock.dart';
 import 'package:unigraf/data/attachments/attachment_store.dart';
@@ -1199,6 +1203,174 @@ void main() {
       final problem = tester.takeException();
       if (problem != null) fail('вкладка «$tab» ломается при крупном шрифте: $problem');
     }
+  });
+
+  group('Значок ДЗ на паре', () {
+    // ЧТК и этика идёт сегодня в 14:40 (среда 07.10.2026): задания на этот день попадают на её карточку
+    Future<ProviderContainer> startWithThreeSources(WidgetTester tester) async {
+      final backend = FakeBackend(hash: 'x');
+      backend.homework['h1'] = backend.hw(subject: 'ЧТК и этика', due: '2026-10-07', text: 'Староста просит: §5');
+      backend.teacherRows['b/ofo-1-bi-25'] = {
+        'id': 'b/ofo-1-bi-25', 'group_id': 'ofo-1-bi-25', 'batch_id': 'b', 'author': 'Халиев М.С-У.', 'subject': 'ЧТК и этика',
+        'body': 'Преподаватель просит: конспект', 'due_date': '2026-10-07', 'kind': null, 'subgroup': null, 'files': <Map<String, dynamic>>[],
+        'deleted': false, 'updated_at': '2026-10-09T12:00:00+00:00',
+      };
+      await _start(tester, prefs: profile, sharedApi: backend.api());
+      await _settle(tester);
+      final container = ProviderScope.containerOf(tester.element(find.byType(UniGrafApp)));
+      await tester.runAsync(() => container.read(homeworkRepositoryProvider).add(HomeworkItem(
+            subject: 'ЧТК и этика',
+            text: 'Своя заметка',
+            dueDate: parseDay('2026-10-07'),
+            createdAt: DateTime.utc(2026, 10, 6),
+          )));
+      container.invalidate(homeworkProvider);
+      await _settle(tester);
+      return container;
+    }
+
+    testWidgets('на карточке один значок с цифрой 3; нажатие открывает окно: преподаватель, староста, ваше', (tester) async {
+      await startWithThreeSources(tester);
+      expect(find.byType(HomeworkBadge), findsOneWidget); // только у ЧТК: у других пар задания нет
+      expect(find.descendant(of: find.byType(HomeworkBadge), matching: find.text('3')), findsOneWidget);
+
+      await tester.tap(find.byType(HomeworkBadge));
+      await _settle(tester);
+      expect(find.textContaining('ДЗ на 7 октября'), findsOneWidget);
+      expect(find.textContaining('3 задания'), findsOneWidget);
+      final teacher = tester.getTopLeft(find.text('Преподаватель просит: конспект')).dy;
+      final headman = tester.getTopLeft(find.text('Староста просит: §5')).dy;
+      final mine = tester.getTopLeft(find.text('Своя заметка')).dy;
+      expect(teacher, lessThan(headman));
+      expect(headman, lessThan(mine));
+      expect(find.text('Преподаватель'), findsOneWidget);
+      expect(find.text('Староста'), findsOneWidget);
+      expect(find.text('Мои'), findsOneWidget);
+    });
+
+    testWidgets('«Всё выполнено» отмечает все три: значок становится серым с галочкой, а ДЗ старосты помнится в телефоне', (tester) async {
+      await startWithThreeSources(tester);
+      await tester.tap(find.byType(HomeworkBadge));
+      await _settle(tester);
+      await tester.tap(find.text('Всё выполнено'));
+      await _settle(tester);
+      expect(find.text('Снять отметки'), findsOneWidget);
+      await tester.tapAt(const Offset(10, 10)); // тап по затемнению закрывает окно
+      await _settle(tester);
+
+      final badge = tester.widget<HomeworkBadge>(find.byType(HomeworkBadge));
+      expect(badge.homework.allDone, isTrue);
+      expect(find.byIcon(Icons.assignment_turned_in_rounded), findsOneWidget);
+      final sp = await SharedPreferences.getInstance();
+      expect(sp.getStringList('groupHomeworkDone'), containsAll(['h1', 'b/ofo-1-bi-25']));
+    });
+
+    testWidgets('одно задание можно отметить отдельно: значок остаётся красным с цифрой 2', (tester) async {
+      await startWithThreeSources(tester);
+      await tester.tap(find.byType(HomeworkBadge));
+      await _settle(tester);
+      await tester.tap(find.byType(Checkbox).first);
+      await _settle(tester);
+      await tester.tapAt(const Offset(10, 10));
+      await _settle(tester);
+      final badge = tester.widget<HomeworkBadge>(find.byType(HomeworkBadge));
+      expect(badge.homework.open, 2);
+      expect(badge.homework.allDone, isFalse);
+    });
+
+    testWidgets('«Открыть в «ДЗ»» переключает на вкладку ДЗ и показывает раздел первого невыполненного (преподаватель)', (tester) async {
+      await startWithThreeSources(tester);
+      await tester.tap(find.byType(HomeworkBadge));
+      await _settle(tester);
+      await tester.tap(find.text('Открыть в «ДЗ»'));
+      await _settle(tester);
+      expect(find.text('Домашка'), findsOneWidget);
+      expect(find.text('Преподаватель просит: конспект'), findsOneWidget);
+      expect(find.text('Староста просит: §5'), findsNothing); // это другой раздел
+    });
+
+    testWidgets('крупный шрифт ×2 на 320 dp: карточка со значком, окно и «Неделя» не переполняются', (tester) async {
+      await tester.runAsync(() async {
+        final loader = FontLoader('Onest')..addFont(Future.value(ByteData.sublistView(File('assets/fonts/Onest.ttf').readAsBytesSync())));
+        await loader.load();
+      });
+      await startWithThreeSources(tester);
+      tester.view.physicalSize = const Size(320, 640);
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await _settle(tester);
+      expect(tester.takeException(), isNull, reason: 'карточка пары со значком');
+
+      await tester.dragUntilVisible(find.byType(HomeworkBadge), find.byType(Scrollable).first, const Offset(0, -150));
+      await _settle(tester);
+      expect(tester.takeException(), isNull, reason: 'карточка пары со значком после прокрутки');
+      await tester.tap(find.byType(HomeworkBadge));
+      await _settle(tester);
+      await tester.dragUntilVisible(find.text('Своя заметка'), find.byType(ListView).last, const Offset(0, -80)); // список в окне прокручивается
+      expect(find.text('Своя заметка'), findsOneWidget);
+      expect(find.text('Открыть в «ДЗ»'), findsOneWidget); // кнопки внизу остаются на месте
+      expect(tester.takeException(), isNull, reason: 'окно с заданиями');
+      await tester.tapAt(const Offset(10, 10));
+      await _settle(tester);
+
+      await tester.tap(find.text('Неделя').last);
+      await _settle(tester);
+      expect(tester.takeException(), isNull, reason: 'неделя со значком');
+    });
+
+    testWidgets('без заданий значка нет', (tester) async {
+      await _start(tester, prefs: profile);
+      expect(find.byType(HomeworkBadge), findsNothing);
+    });
+
+    testWidgets('в «Неделе» значок тоже нажимается и открывает то же окно', (tester) async {
+      await startWithThreeSources(tester);
+      await tester.tap(find.text('Неделя').last);
+      await _settle(tester);
+      expect(find.byType(HomeworkInlineBadge), findsOneWidget);
+      await tester.ensureVisible(find.byType(HomeworkInlineBadge));
+      await tester.tap(find.byType(HomeworkInlineBadge));
+      await _settle(tester);
+      expect(find.text('Своя заметка'), findsOneWidget);
+      expect(find.text('Всё выполнено'), findsOneWidget);
+    });
+  });
+
+  group('Подсказка о дубле при добавлении ДЗ', () {
+    testWidgets('если староста уже задал на этот предмет и срок, показываем подсказку; «Не добавлять» закрывает окно', (tester) async {
+      final index = ScheduleIndex.fromJson(jsonDecode(File('test/fixtures/index.json').readAsStringSync()) as Map<String, dynamic>);
+      final schedule = GroupSchedule.fromJson(jsonDecode(File('test/fixtures/ofo-1-bi-25.json').readAsStringSync()) as Map<String, dynamic>);
+      final due = nextOccurrence('ЧТК и этика', parseDay('2026-10-07'), index, schedule,
+          const UserProfile(formCode: 'ofo', groupId: 'ofo-1-bi-25', subgroup: 1, pe: PeChoice.male))!;
+      final dueText = due.toIso8601String().substring(0, 10);
+
+      final backend = FakeBackend(hash: 'x');
+      backend.homework['h1'] = backend.hw(subject: 'ЧТК и этика', due: dueText, text: 'Староста уже задал это');
+      await _start(tester, prefs: profile, sharedApi: backend.api());
+      await _settle(tester);
+
+      await tester.longPress(find.text('ЧТК и этика').last);
+      await _settle(tester);
+      await tester.tap(find.text('Добавить ДЗ'));
+      await _settle(tester);
+      expect(find.text('На эту пару уже задано'), findsOneWidget);
+      expect(find.textContaining('Староста уже задал это'), findsOneWidget);
+      expect(find.text('Новое ДЗ'), findsOneWidget);
+
+      await tester.tap(find.text('Не добавлять'));
+      await _settle(tester);
+      expect(find.text('Новое ДЗ'), findsNothing);
+    });
+
+    testWidgets('если ничего не задано, подсказки нет', (tester) async {
+      await _start(tester, prefs: profile);
+      await tester.longPress(find.text('ЧТК и этика').last);
+      await _settle(tester);
+      await tester.tap(find.text('Добавить ДЗ'));
+      await _settle(tester);
+      expect(find.text('Новое ДЗ'), findsOneWidget);
+      expect(find.text('На эту пару уже задано'), findsNothing);
+    });
   });
 
   testWidgets('«Неделя» при шрифте ×1,6 на 360 dp: время пары и название дня не рвутся', (tester) async {

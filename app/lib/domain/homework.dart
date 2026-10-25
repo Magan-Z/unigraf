@@ -7,6 +7,16 @@ import '../core/week.dart';
 import 'attachment.dart';
 import 'models.dart';
 
+/// Кто задал ДЗ. Порядок — важность при показе: преподаватель, потом староста, потом личное.
+enum HomeworkSource {
+  teacher('Преподаватель'),
+  headman('Староста'),
+  mine('Мои');
+
+  const HomeworkSource(this.title);
+  final String title;
+}
+
 class HomeworkItem {
   const HomeworkItem({
     this.id,
@@ -17,6 +27,9 @@ class HomeworkItem {
     this.done = false,
     required this.createdAt,
     this.attachments = const [],
+    this.source = HomeworkSource.mine,
+    this.sharedId,
+    this.author,
   });
 
   final int? id; // null — ещё не сохранено в базу
@@ -27,6 +40,9 @@ class HomeworkItem {
   final bool done;
   final DateTime createdAt;
   final List<Attachment> attachments; // фото и файлы к заданию
+  final HomeworkSource source; // чьё это ДЗ
+  final String? sharedId; // номер строки на сервере (ДЗ старосты и преподавателей); у личного null
+  final String? author; // имя преподавателя, если ДЗ от него
 
   HomeworkItem copyWith({bool? done, List<Attachment>? attachments}) => HomeworkItem(
         id: id,
@@ -37,6 +53,9 @@ class HomeworkItem {
         done: done ?? this.done,
         createdAt: createdAt,
         attachments: attachments ?? this.attachments,
+        source: source,
+        sharedId: sharedId,
+        author: author,
       );
 
   /// Одинаковое ДЗ (предмет, текст, срок) — нужно, чтобы импорт не плодил дубликаты.

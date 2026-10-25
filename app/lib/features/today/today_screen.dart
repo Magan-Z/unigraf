@@ -10,6 +10,7 @@ import '../../core/bells.dart';
 import '../../core/formatting.dart';
 import '../../domain/diff_summary.dart';
 import '../../domain/homework.dart';
+import '../../domain/lesson_homework.dart';
 import '../../domain/models.dart';
 import '../../domain/schedule_resolver.dart';
 import '../../theme/subject_palette.dart';
@@ -24,6 +25,7 @@ import '../common/reveal.dart';
 import '../common/widget_promo.dart';
 import '../common/room_plate.dart';
 import '../common/word_fit_text.dart';
+import '../homework/lesson_homework_sheet.dart';
 import '../overrides/day_edits.dart';
 
 class TodayScreen extends ConsumerStatefulWidget {
@@ -218,7 +220,7 @@ class _DayPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final homeworkDue = dueOn(ref.watch(homeworkWithGroupProvider).value ?? const [], day);
+    final allHomework = ref.watch(homeworkWithGroupProvider).value ?? const <HomeworkItem>[];
     final lessons = resolve(day, data.index, data.schedule, data.profile, overrides: data.overrides, forcedWeek: data.forcedWeek);
     final theme = Theme.of(context);
     final container = ProviderScope.containerOf(context);
@@ -349,7 +351,8 @@ class _DayPage extends ConsumerWidget {
           highlighted: phase == _Phase.current,
           dimmed: phase == _Phase.past,
           note: lessonNote(l, now),
-          hasHomework: homeworkDue.any((h) => h.subject == l.subject),
+          homework: LessonHomework(homeworkForLesson(allHomework, subject: l.subject, day: day, kind: l.kind)),
+          onHomework: () => showLessonHomework(context, l),
           withGroups: l.withGroups,
           onLongPress: () => showLessonActions(context, l),
           onTap: () => showLessonActions(context, l),

@@ -1,16 +1,19 @@
 // Карточка пары: название, тип, преподаватель и «табличка» с аудиторией. Цвета — по предмету.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app_state.dart';
 import '../../core/bells.dart';
 import '../../core/formatting.dart';
 import '../../domain/assessments.dart';
+import '../../domain/lesson_homework.dart';
 import '../../domain/models.dart';
 import '../../theme/next_design.dart';
 import '../../theme/subject_palette.dart';
 import '../../theme/tokens.dart';
+import 'homework_badge.dart';
 import 'press_scale.dart';
 import 'room_plate.dart';
 import 'word_fit_text.dart';
@@ -60,7 +63,8 @@ class LessonTile extends ConsumerWidget {
     this.highlighted = false,
     this.dimmed = false,
     this.note,
-    this.hasHomework = false,
+    this.homework = LessonHomework.none,
+    this.onHomework,
     this.footer,
     this.withGroups = const [],
     this.onLongPress,
@@ -79,7 +83,11 @@ class LessonTile extends ConsumerWidget {
   final bool highlighted;
   final bool dimmed;
   final String? note;
-  final bool hasHomework;
+  /// ДЗ к этой паре (из трёх источников): на карточке рисуется значок-закладка.
+  final LessonHomework homework;
+
+  /// Нажатие на значок ДЗ (откроется окно со списком заданий).
+  final VoidCallback? onHomework;
   final String? footer; // дополнительная строка внизу (например, список групп в поиске)
   final List<String> withGroups; // группы, с которыми объединена лекция (на карточке — значок с числом)
   final VoidCallback? onLongPress;
@@ -108,34 +116,35 @@ class LessonTile extends ConsumerWidget {
           // цветная полоса слева — граница, а не отдельный блок: так карточка не зависит от IntrinsicHeight
           // Новый вид: без толстой полосы слева (цвет предмета уже есть на точке ленты и на табличке аудитории)
           decoration: kNextDesign ? const BoxDecoration() : BoxDecoration(border: Border(left: BorderSide(color: tone.accent, width: 6))),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child: Stack(children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(
               child: Padding(
                 padding: EdgeInsets.fromLTRB(kNextDesign ? Gap.lg + 2 : Gap.lg, dense ? 10 : Gap.md, Gap.md, dense ? 10 : Gap.md),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-                  if (timeLabel != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: Gap.xs),
-                      child: Text(timeLabel!, style: theme.textTheme.labelMedium?.copyWith(color: tone.onContainer)),
+                  // Название и время не заезжают под значок ДЗ; блок не ниже значка, чтобы нижняя строка не упиралась в его «хвост»
+                  ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: homework.isEmpty ? 0 : HomeworkBadge.ribbonHeight - Gap.md - Gap.sm),
+                    child: Padding(
+                      padding: EdgeInsets.only(right: homework.isEmpty ? 0 : HomeworkBadge.reserved - Gap.md),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        if (timeLabel != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: Gap.xs),
+                            child: Text(timeLabel!, style: theme.textTheme.labelMedium?.copyWith(color: tone.onContainer)),
+                          ),
+                        WordFitText(
+                          styles.name(subject),
+                          style: dense
+                              ? theme.textTheme.titleMedium?.copyWith(color: textColor, fontSize: 15, fontWeight: FontWeight.w600)
+                              : theme.textTheme.titleMedium?.copyWith(color: textColor),
+                        ),
+                      ]),
                     ),
-                  WordFitText(
-                    styles.name(subject),
-                    style: dense
-                        ? theme.textTheme.titleMedium?.copyWith(color: textColor, fontSize: 15, fontWeight: FontWeight.w600)
-                        : theme.textTheme.titleMedium?.copyWith(color: textColor),
-                    trailing: hasHomework
-                        ? WidgetSpan(
-                            alignment: PlaceholderAlignment.middle,
-                            child: Padding(
-                              padding: const EdgeInsets.only(left: Gap.sm),
-                              child: Icon(Icons.assignment_late_rounded, size: 18, color: scheme.error, semanticLabel: 'Есть домашнее задание'),
-                            ),
-                          )
-                        : null,
                   ),
                   const SizedBox(height: Gap.sm),
                   // Нижняя строка: тип и преподаватель слева, «табличка» с аудиторией справа
-                  Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  LayoutBuilder(builder: (context, box) => Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
                     Expanded(
                       child: Wrap(spacing: Gap.sm, runSpacing: Gap.xs, crossAxisAlignment: WrapCrossAlignment.center, children: [
                         KindBadge(kind, tone: tone),
@@ -150,9 +159,17 @@ class LessonTile extends ConsumerWidget {
                     ),
                     if (room != null) ...[
                       const SizedBox(width: Gap.sm),
-                      RoomPlate(room: room!, tone: tone, pop: kNextDesign && note != null),
+                      // Крупная табличка при крупном системном шрифте сжимается, но не занимает больше 62 % строки
+                      ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: box.maxWidth * 0.62),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: RoomPlate(room: room!, tone: tone, size: 28, pop: kNextDesign && note != null),
+                        ),
+                      ),
                     ],
-                  ]),
+                  ])),
                   if (note != null)
                     Padding(
                       padding: const EdgeInsets.only(top: Gap.sm),
@@ -174,6 +191,13 @@ class LessonTile extends ConsumerWidget {
                 ]),
               ),
             ),
+            ]),
+            if (!homework.isEmpty && onHomework != null)
+              Positioned(
+                top: 0,
+                right: 14 - (HomeworkBadge.hitWidth - HomeworkBadge.ribbonWidth) / 2,
+                child: HomeworkBadge(homework: homework, cardColor: tone.container, onPressed: onHomework!),
+              ),
           ]),
         ),
       ),
@@ -186,7 +210,7 @@ class LessonTile extends ConsumerWidget {
         '${room != null ? ', аудитория $room' : ''}${teacher != null ? ', $teacher' : ''}',
         [
           if (withGroups.isNotEmpty) 'Вместе с группами: ${withGroups.join(', ')}',
-          if (hasHomework) 'Есть домашнее задание',
+          if (!homework.isEmpty) homework.allDone ? 'Домашнее задание выполнено' : 'Есть домашнее задание: ${homework.open}',
           ?note,
           ?footer,
         ],
@@ -194,6 +218,10 @@ class LessonTile extends ConsumerWidget {
       onTap: onTap,
       onLongPress: onLongPress,
       onLongPressHint: onLongPress == null ? null : 'Действия с парой',
+      // Значок ДЗ спрятан от читалки вместе с остальной карточкой, поэтому его нажатие доступно отдельным действием
+      customSemanticsActions: {
+        if (!homework.isEmpty && onHomework != null) const CustomSemanticsAction(label: 'Открыть домашнее задание'): onHomework!,
+      },
       child: ExcludeSemantics(
         child: AnimatedOpacity(
           opacity: dimmed ? 0.55 : 1,

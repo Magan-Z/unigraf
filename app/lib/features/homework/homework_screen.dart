@@ -38,6 +38,16 @@ class _HomeworkScreenState extends ConsumerState<HomeworkScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Со значка ДЗ на паре: открыть раздел нужного источника (если такого раздела нет, ниже останется «Мои»)
+    ref.listen(requestedHomeworkSourceProvider, (_, source) {
+      if (source == null) return;
+      setState(() => _tab = switch (source) {
+            HomeworkSource.mine => _Tab.mine,
+            HomeworkSource.headman => _Tab.group,
+            HomeworkSource.teacher => _Tab.teacher,
+          });
+      ref.read(requestedHomeworkSourceProvider.notifier).clear();
+    });
     final homework = ref.watch(homeworkProvider);
     final today = ref.watch(todayProvider);
     final theme = Theme.of(context);

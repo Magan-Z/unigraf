@@ -6,12 +6,14 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app_state.dart';
 import '../../core/bells.dart';
 import '../../core/formatting.dart';
 import '../../domain/homework.dart';
+import '../../domain/lesson_homework.dart';
 import '../../domain/models.dart';
 import '../../domain/schedule_resolver.dart';
 import '../../theme/app_theme.dart' show roomTextStyle;
@@ -20,7 +22,9 @@ import '../../theme/tokens.dart';
 import '../common/skeleton.dart';
 import '../common/lesson_widgets.dart';
 import '../common/reveal.dart';
+import '../common/homework_badge.dart';
 import '../common/word_fit_text.dart';
+import '../homework/lesson_homework_sheet.dart';
 import '../common/sliding_segments.dart';
 import '../overrides/day_edits.dart';
 
@@ -141,7 +145,7 @@ class _WeekScreenState extends ConsumerState<WeekScreen> {
                                     highlighted: entry.day == today && !now.isBefore(l.startAt) && now.isBefore(l.endAt),
                                     dimmed: past || (entry.day == today && !now.isBefore(l.endAt)),
                                     note: lessonNote(l, now),
-                                    hasHomework: dueOn(homework, entry.day).any((h) => h.subject == l.subject),
+                                    homework: LessonHomework(homeworkForLesson(homework, subject: l.subject, day: entry.day, kind: l.kind)),
                                   ),
                                 );
                               },
@@ -436,7 +440,7 @@ class _LessonRow extends ConsumerWidget {
     required this.highlighted,
     required this.dimmed,
     required this.note,
-    required this.hasHomework,
+    required this.homework,
   });
 
   final ResolvedLesson lesson;
@@ -446,7 +450,7 @@ class _LessonRow extends ConsumerWidget {
   final bool highlighted;
   final bool dimmed;
   final String? note;
-  final bool hasHomework;
+  final LessonHomework homework;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -500,15 +504,15 @@ class _LessonRow extends ConsumerWidget {
                   WordFitText(
                     styles.name(l.subject),
                     style: theme.textTheme.titleMedium?.copyWith(color: scheme.onSurface, fontSize: 15.5, fontWeight: FontWeight.w600, height: 1.25),
-                    trailing: hasHomework
-                        ? WidgetSpan(
+                    trailing: homework.isEmpty
+                        ? null
+                        : WidgetSpan(
                             alignment: PlaceholderAlignment.middle,
                             child: Padding(
-                              padding: const EdgeInsets.only(left: Gap.sm),
-                              child: Icon(Icons.assignment_late_rounded, size: 17, color: scheme.error, semanticLabel: 'Есть домашнее задание'),
+                              padding: const EdgeInsets.only(left: Gap.xs),
+                              child: HomeworkInlineBadge(homework: homework, onPressed: () => showLessonHomework(context, l)),
                             ),
-                          )
-                        : null,
+                          ),
                   ),
                   const SizedBox(height: 5),
                   Wrap(spacing: Gap.sm, runSpacing: Gap.xs, crossAxisAlignment: WrapCrossAlignment.center, children: [
@@ -554,13 +558,16 @@ class _LessonRow extends ConsumerWidget {
         '${room != null ? ', аудитория $room' : ''}${teacher != null ? ', $teacher' : ''}',
         [
           if (l.withGroups.isNotEmpty) 'Вместе с группами: ${l.withGroups.join(', ')}',
-          if (hasHomework) 'Есть домашнее задание',
+          if (!homework.isEmpty) homework.allDone ? 'Домашнее задание выполнено' : 'Есть домашнее задание: ${homework.open}',
           ?note,
         ],
       ),
       onTap: () => showLessonActions(context, l),
       onLongPress: () => showLessonActions(context, l),
       onLongPressHint: 'Действия с парой',
+      customSemanticsActions: {
+        if (!homework.isEmpty) const CustomSemanticsAction(label: 'Открыть домашнее задание'): () => showLessonHomework(context, l),
+      },
       child: ExcludeSemantics(child: row),
     );
   }

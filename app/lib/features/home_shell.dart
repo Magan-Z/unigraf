@@ -72,6 +72,12 @@ class _HomeShellState extends ConsumerState<HomeShell>
     links.listen(_openLink);
     links.initialLink().then(_openLink);
 
+    // Значок ДЗ на паре → «Открыть в ДЗ»: переключаем вкладку главного экрана
+    ref.listenManual(requestedTabProvider, (_, tab) {
+      if (tab == null || !mounted) return;
+      _pick(tab);
+      ref.read(requestedTabProvider.notifier).clear();
+    });
     // Нажатие на уведомление: пара → её день на «Сегодня», напоминание о ДЗ → вкладка «ДЗ»
     final gateway = ref.read(notificationGatewayProvider);
     _tapSub = gateway.taps.listen(_openNotification);
