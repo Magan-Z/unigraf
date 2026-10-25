@@ -230,6 +230,82 @@ input[type=date] { font-variant-numeric: tabular-nums; }
   .seg span { text-align: center; padding: 0 8px; }
   .result { padding: 36px 20px; }
 }
+/* Столбцы формы: на узком экране это просто поля друг под другом, на компьютере — два столбца (см. ниже) */
+.col { display: contents; }
+
+/* Компьютер: страница помещается в окно целиком и не прокручивается. Два столбца, шапка в одну строку, без большой «обложки».
+   Если окно очень низкое (меньше 560 px), включается обычная прокрутка, как на телефоне. */
+@media (min-width: 960px) and (min-height: 560px) {
+  html, body { height: 100%; overflow: hidden; }
+  body { min-height: 0; height: 100dvh; }
+  .backdrop { height: 240px; }
+  .hero { display: none; }
+  .top-in { max-width: 1120px; padding: 12px 28px 8px; }
+  .brand-mark { width: 36px; height: 36px; border-radius: 11px; }
+  main { display: flex; flex-direction: column; min-height: 0; max-width: 1120px; margin: 0 auto; padding: 0 28px 10px; }
+  .foot { padding: 0 20px 10px; font-size: 13px; }
+  .panel { padding: 18px 28px; }
+  .panel-form, .panel-login { flex: 0 1 auto; min-height: 0; overflow: auto; }
+  h1 { font-size: 26px; margin-bottom: 6px; }
+  .lead { max-width: none; }
+
+  /* Вход */
+  .panel-login { display: flex; flex-direction: column; }
+  .panel-login .panel-head { margin-bottom: 18px; }
+  .methods { grid-template-columns: 1.3fr auto 1fr; gap: 0 28px; }
+  h2 { margin-bottom: 12px; }
+  .method-qr { display: grid; grid-template-columns: 188px minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; column-gap: 22px; align-items: start; }
+  .method-qr h2 { grid-column: 1 / -1; }
+  .method-qr .qr-tile { grid-column: 1; grid-row: 2; width: 188px; }
+  .method-qr .timer { grid-column: 1; grid-row: 3; margin-top: 6px; }
+  .method-qr #refresh-code { grid-column: 1; grid-row: 4; justify-self: start; }
+  .method-qr .how { grid-column: 2; grid-row: 2 / span 2; margin: 0; }
+  .method-qr .token { grid-column: 2; grid-row: 4; align-self: end; justify-self: start; margin-top: 0; }
+  .token-val.number { font-size: 44px; }
+  .safe { margin-top: 18px; padding-top: 14px; }
+
+  /* Форма: шапка в одну строку, поля в два столбца, кнопка внизу */
+  .panel-form { display: flex; flex-direction: column; padding-bottom: 0; }
+  .panel-form .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 10px; }
+  .panel-form h1 { margin: 0; white-space: nowrap; flex: none; }
+  .panel-form .who { margin-top: 0; flex: 1; min-width: 0; }
+  #form { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); grid-template-rows: auto minmax(104px, 1fr) auto auto auto; gap: 0 32px; }
+  .f-subject { grid-column: 1; grid-row: 1; }
+  .f-groups { grid-column: 1; grid-row: 2; min-height: 0; overflow-y: auto; margin-left: -4px; padding: 0 4px 4px; }
+  .f-files { grid-column: 1; grid-row: 3; }
+  .f-body { grid-column: 2; grid-row: 1 / span 2; }
+  .f-row { grid-column: 2; grid-row: 3; }
+  .field { margin-bottom: 12px; }
+  label, legend { margin-bottom: 6px; }
+  .link { min-height: 36px; padding: 6px 0; }
+  .chips { margin-bottom: 4px; }
+  .f-body { display: flex; flex-direction: column; min-height: 0; }
+  .f-body textarea { flex: 1; min-height: 72px; resize: none; }
+  .counter { margin-top: 4px; }
+  .f-row { gap: 16px 24px; flex-wrap: nowrap; }
+  .f-row .field { margin-bottom: 8px; }
+  .seg span { padding: 0 14px; }
+  .due { width: 184px; flex: none; }
+  .due p { margin-top: 4px; }
+  .f-files { margin-bottom: 8px; }
+  .f-files > .small { margin: 0; font-size: 13px; line-height: 1.4; }
+  .drop { flex-direction: row; justify-content: center; gap: 14px; padding: 10px 16px; border-radius: 18px; }
+  .drop-ic { display: none; }
+  .drop-title { margin: 0; white-space: nowrap; }
+  .drop .btn { white-space: nowrap; }
+  .files { margin: 8px 0; max-height: 92px; overflow-y: auto; }
+  .files li { grid-template-columns: auto 1fr auto; padding: 4px 2px 4px 8px; gap: 0 10px; }
+  .files .ext { width: 30px; height: 30px; border-radius: 8px; font-size: 10px; }
+  .files .meta { flex-direction: row; align-items: baseline; gap: 10px; min-width: 0; }
+  .files .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .files .size { flex: none; }
+  .files .rm { width: 36px; height: 36px; }
+  .files progress { margin-top: 2px; }
+  .f-error { grid-column: 1 / -1; grid-row: 4; margin: 6px 0 0; }
+  .panel-form { padding-top: 16px; }
+  .actions { position: sticky; bottom: 0; z-index: 2; grid-column: 1 / -1; grid-row: 5; margin: 8px -28px 0; padding: 12px 28px; }
+}
+@media (min-width: 960px) and (min-height: 820px) { .f-body textarea { min-height: 190px; } .f-groups { min-height: 130px; } }
 @media (prefers-reduced-motion: reduce) {
   .hero-mark { animation: none; }
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation-duration: .001ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; }

@@ -70,14 +70,14 @@
   </section>
 
   <!-- Вход: два способа рядом -->
-  <section id="view-login" class="panel" hidden aria-labelledby="login-title">
+  <section id="view-login" class="panel panel-login" hidden aria-labelledby="login-title">
     <div class="panel-head">
       <h1 id="login-title">Войдите с телефона</h1>
       <p class="lead">Пароль не нужен и на этом компьютере ничего не сохраняется. Нужен телефон, на котором в UniGraf включён режим преподавателя. Выберите один из двух способов.</p>
     </div>
 
     <div class="methods">
-      <section class="method" aria-labelledby="m-qr">
+      <section class="method method-qr" aria-labelledby="m-qr">
         <h2 id="m-qr"><svg class="ic" aria-hidden="true"><use href="#i-scan"/></svg>Сканируйте QR-код</h2>
         <div class="qr-tile">
           <canvas id="qr" width="240" height="240" role="img" aria-label="QR-код для входа"></canvas>
@@ -109,7 +109,7 @@
   </section>
 
   <!-- Форма отправки -->
-  <section id="view-form" class="panel" hidden aria-labelledby="form-title">
+  <section id="view-form" class="panel panel-form" hidden aria-labelledby="form-title">
     <div class="panel-head">
       <h1 id="form-title">Отправить ДЗ студентам</h1>
       <div class="who">
@@ -123,13 +123,14 @@
     </div>
 
     <form id="form" novalidate>
-      <div class="field">
+      <div class="col">
+      <div class="field f-subject">
         <label for="subject">Предмет</label>
         <div class="select"><select id="subject" required></select></div>
         <p id="no-subjects" class="error small" hidden>В расписании не нашлись ваши пары. Напишите автору приложения, чтобы это исправить.</p>
       </div>
 
-      <fieldset class="field" id="groups-field">
+      <fieldset class="field f-groups" id="groups-field">
         <legend>Кому отправить</legend>
         <div id="groups" class="chips"></div>
         <button type="button" id="toggle-all" class="link small">Выбрать все</button>
@@ -137,13 +138,15 @@
         <p id="no-groups" class="error small" hidden>Для этого предмета нет групп, которым вам разрешена отправка. Напишите автору приложения, чтобы их добавили.</p>
       </fieldset>
 
-      <div class="field">
+      </div>
+      <div class="col col-b">
+      <div class="field f-body">
         <label for="body">Что задать</label>
         <textarea id="body" rows="5" maxlength="2000" required></textarea>
         <p class="counter muted small"><span id="body-count">0</span> / 2000</p>
       </div>
 
-      <div class="row">
+      <div class="row f-row">
         <fieldset class="field grow">
           <legend>К какому занятию</legend>
           <div class="seg">
@@ -159,7 +162,7 @@
         </div>
       </div>
 
-      <div class="field">
+      <div class="field f-files">
         <label for="file-input">Файлы <span class="muted small hint">до 5 шт., каждый до 15 МБ</span></label>
         <div id="drop" class="drop" tabindex="-1">
           <span class="drop-ic" aria-hidden="true"><svg class="ic"><use href="#i-upload"/></svg></span>
@@ -171,7 +174,9 @@
         <p class="muted small">Программы и скрипты (.exe, .apk, .bat, .js и подобные) отправлять нельзя. Файл крупнее 15 МБ лучше дать ссылкой на облако.</p>
       </div>
 
-      <p id="form-error" class="error" role="alert" hidden></p>
+      </div>
+
+      <p id="form-error" class="error f-error" role="alert" hidden></p>
       <div class="actions">
         <button type="submit" id="send" class="btn" disabled>Отправить</button>
         <span id="send-note" class="muted small"></span>
