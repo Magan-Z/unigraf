@@ -124,7 +124,7 @@ class LessonTile extends ConsumerWidget {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
                   // Название и время не заезжают под значок ДЗ; блок не ниже значка, чтобы нижняя строка не упиралась в его «хвост»
                   ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: homework.isEmpty ? 0 : HomeworkBadge.ribbonHeight - Gap.md - Gap.sm),
+                    constraints: BoxConstraints(minHeight: homework.isEmpty ? 0 : HomeworkBadge.top + HomeworkBadge.size - Gap.md),
                     child: Padding(
                       padding: EdgeInsets.only(right: homework.isEmpty ? 0 : HomeworkBadge.reserved - Gap.md),
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -194,9 +194,9 @@ class LessonTile extends ConsumerWidget {
             ]),
             if (!homework.isEmpty && onHomework != null)
               Positioned(
-                top: 0,
-                right: 14 - (HomeworkBadge.hitWidth - HomeworkBadge.ribbonWidth) / 2,
-                child: HomeworkBadge(homework: homework, cardColor: tone.container, onPressed: onHomework!),
+                top: HomeworkBadge.top,
+                right: HomeworkBadge.right,
+                child: HomeworkBadge(homework: homework, onPressed: onHomework!),
               ),
           ]),
         ),

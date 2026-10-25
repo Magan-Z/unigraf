@@ -1,5 +1,6 @@
-// Значок домашнего задания на карточке пары: «закладка», которая торчит из верхнего края (как закладка в тетради).
-// Красная — есть невыполненное (с цифрой, если заданий несколько); серая с галочкой — всё сделано.
+// Значок домашнего задания на карточке пары: квадратная кнопка с рамкой в правом верхнем углу, как «табличка» аудитории,
+// только красная. Внутри прежний значок приложения (портфель с восклицательным знаком). Красная — есть невыполненное
+// (с цифрой, если заданий несколько); серая с галочкой — всё сделано. Фон кнопки берётся из темы, поэтому в тёмной теме она тёмная.
 // Нажатие открывает окно со списком заданий к этой паре.
 
 import 'package:flutter/material.dart';
@@ -18,57 +19,43 @@ String homeworkBadgeLabel(LessonHomework hw) {
 }
 
 class HomeworkBadge extends StatelessWidget {
-  const HomeworkBadge({super.key, required this.homework, required this.cardColor, required this.onPressed});
+  const HomeworkBadge({super.key, required this.homework, required this.onPressed});
 
   final LessonHomework homework;
-
-  /// Цвет карточки под значком: от него считается серый цвет выполненного.
-  final Color cardColor;
   final VoidCallback onPressed;
 
-  static const double ribbonWidth = 36;
-  static const double ribbonHeight = 56;
+  /// Сторона кнопки: не меньше 44 dp, чтобы попадать одним пальцем.
+  static const double size = 44;
 
-  /// Ширина области нажатия (меньше 48 dp не бывает) и высота значка вместе с областью.
-  static const double hitWidth = 48;
+  /// Отступы от верхнего и правого края карточки.
+  static const double top = 10;
+  static const double right = 12;
 
-  /// Сколько места значок занимает справа от левого края карточки: нужно, чтобы название не заезжало под него.
-  static const double reserved = 14 + ribbonWidth + 6;
+  /// Сколько места слева от правого края карточки кнопка занимает вместе с зазором: название не должно заезжать под неё.
+  static const double reserved = right + size + 8;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final done = homework.allDone;
-    final bg = done ? Color.lerp(cardColor, scheme.onSurfaceVariant, 0.55)! : scheme.error;
-    final fg = done ? cardColor : scheme.onError;
     final count = homework.open;
+    // Красная — «надо сделать»; серая — сделано. Рамка и значок одного цвета, фон из темы (как у таблички аудитории).
+    final color = done ? scheme.onSurfaceVariant : scheme.error;
+    final border = done ? scheme.outlineVariant : scheme.error;
 
-    final ribbon = PhysicalShape(
-      clipper: const _RibbonClipper(),
-      color: bg,
-      elevation: 2,
-      shadowColor: Colors.black,
+    final button = Material(
+      color: scheme.surface.withValues(alpha: done ? 0.6 : 0.85),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(Radii.sm),
+        side: BorderSide(color: border, width: kNextDesign ? 2.5 : 2),
+      ),
       clipBehavior: Clip.antiAlias,
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(
-          onTap: onPressed,
-          child: SizedBox(
-            width: ribbonWidth,
-            height: ribbonHeight,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Icon(done ? Icons.assignment_turned_in_rounded : Icons.assignment_late_rounded, size: 22, color: fg),
-                if (!done && count > 1)
-                  Text(
-                    count > 9 ? '9+' : '$count',
-                    textScaler: TextScaler.noScaling,
-                    style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w800, height: 1.1),
-                  ),
-              ]),
-            ),
-          ),
+      child: InkWell(
+        onTap: onPressed,
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: Icon(done ? Icons.assignment_turned_in_rounded : Icons.assignment_late_rounded, size: 26, color: color),
         ),
       ),
     );
@@ -78,36 +65,37 @@ class HomeworkBadge extends StatelessWidget {
       label: homeworkBadgeLabel(homework),
       excludeSemantics: true,
       onTap: onPressed,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onPressed,
-        child: SizedBox(
-          width: hitWidth,
-          height: ribbonHeight + 4,
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: kNextDesign ? PressScale(scale: 0.94, child: ribbon) : ribbon,
-          ),
-        ),
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: Stack(clipBehavior: Clip.none, children: [
+          Positioned.fill(child: kNextDesign ? PressScale(scale: 0.94, child: button) : button),
+          if (!done && count > 1)
+            Positioned(
+              top: -6,
+              right: -6,
+              child: IgnorePointer(
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: scheme.error,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: scheme.surface, width: 2),
+                  ),
+                  child: Text(
+                    count > 9 ? '9+' : '$count',
+                    textScaler: TextScaler.noScaling,
+                    style: TextStyle(color: scheme.onError, fontSize: 12, fontWeight: FontWeight.w800, height: 1.1),
+                  ),
+                ),
+              ),
+            ),
+        ]),
       ),
     );
   }
-}
-
-class _RibbonClipper extends CustomClipper<Path> {
-  const _RibbonClipper();
-
-  @override
-  Path getClip(Size size) => Path()
-    ..moveTo(0, 0)
-    ..lineTo(size.width, 0)
-    ..lineTo(size.width, size.height)
-    ..lineTo(size.width / 2, size.height * 0.8)
-    ..lineTo(0, size.height)
-    ..close();
-
-  @override
-  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }
 
 /// Компактный значок для «Недели», где строки тесные: тот же значок из приложения, с цифрой и областью нажатия 44 dp.
