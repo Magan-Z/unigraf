@@ -296,7 +296,7 @@ void main() {
 
     links.send('unigraf://search');
     await _settle(tester);
-    expect(find.text('Свободные'), findsOneWidget); // вкладка «Поиск»
+    expect(find.text('Группа'), findsOneWidget); // вкладка «Поиск»
   });
 
   testWidgets('Общая лекция: на карточке значок «+1», в меню пары — с какими группами она объединена', (tester) async {
@@ -1255,6 +1255,8 @@ void main() {
     expect(find.textContaining('Сейчас ведёт: Технологическое предпринимательство'), findsOneWidget);
 
     // Свободные аудитории на 3 пару: 2-05 занята, значит в списке свободных её нет
+    await tester.tap(find.text('Аудитория'));
+    await _settle(tester);
     await tester.tap(find.text('Свободные'));
     await _settle(tester);
     await tester.tap(find.text('3 пара'));
@@ -1541,11 +1543,88 @@ void main() {
     await _settle(tester);
     expect(tester.takeException(), isNull);
 
-    for (final mode in ['Аудитория', 'Свободные', 'Преподаватель']) {
+    for (final mode in ['Аудитория', 'Свободные', 'Пары в аудитории', 'Группа', 'Преподаватель']) {
       await tester.tap(find.text(mode));
       await _settle(tester);
       expect(tester.takeException(), isNull, reason: 'режим «$mode»');
     }
+  });
+
+  testWidgets('Поиск группы: ввод названия, пары на день, подгруппы; выбор кнопкой по курсу', (tester) async {
+    await _start(tester, prefs: profile); // среда 07.10.2026 13:30 МСК
+    await tester.tap(find.text('Поиск').last);
+    await _settle(tester);
+    await tester.tap(find.text('Группа'));
+    await _settle(tester);
+
+    // Пока группа не выбрана: подсказка и кнопки групп по курсам
+    expect(find.textContaining('Введите название группы'), findsOneWidget);
+    expect(find.widgetWithText(ActionChip, '2 БИ-25'), findsOneWidget);
+
+    // Ввод «би25» → подсказки → выбор
+    await tester.enterText(find.byType(TextField).first, 'би25');
+    await _settle(tester);
+    await tester.tap(find.text('2 БИ-25').last);
+    await _settle(tester);
+    // Среда у 2 БИ-25: в 2 пару разные предметы у подгрупп (с пометкой), в 3 — общая лекция. «Сегодня» под вкладкой не видна
+    expect(find.text('Технологическое предпринимательство').hitTestable(), findsNWidgets(2));
+    expect(find.text('п/г 2').hitTestable(), findsOneWidget);
+    expect(find.textContaining('без правок старосты'), findsOneWidget);
+    expect(find.text('Обе подгруппы'), findsOneWidget);
+
+    // Другой день, переключение подгруппы — без ошибок
+    await tester.tap(find.text('Завтра'));
+    await _settle(tester);
+    await tester.tap(find.text('БИ-25-3'));
+    await _settle(tester);
+    expect(tester.takeException(), isNull);
+
+    // Режим помнит группу: вернулись — поле с названием, расписание на месте
+    await tester.tap(find.text('Преподаватель'));
+    await _settle(tester);
+    await tester.tap(find.text('Группа'));
+    await _settle(tester);
+    expect(tester.widget<TextField>(find.byType(TextField).first).controller!.text, '2 БИ-25');
+  });
+
+  testWidgets('Поиск группы: кнопка с названием открывает расписание', (tester) async {
+    await _start(tester, prefs: profile);
+    await tester.tap(find.text('Поиск').last);
+    await _settle(tester);
+    await tester.tap(find.text('Группа'));
+    await _settle(tester);
+    await tester.ensureVisible(find.widgetWithText(ActionChip, '1 БИ-25'));
+    await tester.tap(find.widgetWithText(ActionChip, '1 БИ-25'));
+    await _settle(tester);
+    expect(find.text('Технологическое предпринимательство').hitTestable(), findsOneWidget); // «Сегодня» под вкладкой тоже есть, но не видна
+    expect(tester.widget<TextField>(find.byType(TextField).first).controller!.text, '1 БИ-25');
+  });
+
+  testWidgets('Поиск аудитории: подсказка объясняет, что вводить; переключатель «Пары в аудитории / Свободные»', (tester) async {
+    await _start(tester, prefs: profile);
+    await tester.tap(find.text('Поиск').last);
+    await _settle(tester);
+    await tester.tap(find.text('Аудитория'));
+    await _settle(tester);
+
+    expect(find.text('Пары в аудитории'), findsNWidgets(2)); // кнопка переключателя и заголовок подсказки
+    expect(find.textContaining('Введите номер, например 2-05'), findsOneWidget);
+    expect(find.textContaining('выберите «Свободные»'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).first, '2-15');
+    await _settle(tester);
+    await tester.tap(find.text('2-15').last);
+    await _settle(tester);
+    expect(find.text('ЧТК и этика').hitTestable(), findsOneWidget);
+
+    // «Свободные» и обратно: номер аудитории остаётся в поле
+    await tester.tap(find.text('Свободные'));
+    await _settle(tester);
+    expect(find.textContaining('свободно'), findsOneWidget);
+    await tester.tap(find.text('Пары в аудитории').first);
+    await _settle(tester);
+    expect(tester.widget<TextField>(find.byType(TextField).first).controller!.text, '2-15');
+    expect(find.text('ЧТК и этика').hitTestable(), findsOneWidget);
   });
 
   testWidgets('Уведомления: план строится из расписания, разрешение спрашивается один раз', (tester) async {

@@ -13,6 +13,7 @@ class CampusLesson {
     required this.room,
     required this.kind,
     required this.groups,
+    this.note,
   });
 
   final int pair;
@@ -21,6 +22,9 @@ class CampusLesson {
   final String? room;
   final LessonKind kind;
   final List<String> groups; // названия групп, у которых это занятие
+
+  /// Пометка вместо списка групп (режим «Группа»): подгруппа, юноши/девушки, «вместе с …».
+  final String? note;
 }
 
 /// Аудитория в формате «этаж-номер»: 2-05, 3-120, 4-02а. («3 корпус», «читальный зал» — не считаем.)
@@ -28,16 +32,23 @@ final _roomPattern = RegExp(r'^\d-\d{2,3}[а-я]?$');
 
 bool isNumberedRoom(String room) => _roomPattern.hasMatch(room);
 
-/// Все занятия института в конкретный день. Общие лекции объединяются в одну запись.
-List<CampusLesson> campusLessons(DateTime date, ScheduleIndex index, List<GroupSchedule> schedules, {int? forcedWeek}) {
+/// Учебный день и номер недели; null — занятий нет (воскресенье, праздник, вне семестра).
+(DateTime, int)? _teachingDay(DateTime date, ScheduleIndex index, int? forcedWeek) {
   final day = dayOnly(date);
   if (day.weekday == DateTime.sunday ||
       index.holidays.contains(day) ||
       day.isBefore(index.semesterStart) ||
       day.isAfter(index.semesterEnd)) {
-    return [];
+    return null;
   }
-  final week = forcedWeek ?? weekNumber(day, index.weekAnchor);
+  return (day, forcedWeek ?? weekNumber(day, index.weekAnchor));
+}
+
+/// Все занятия института в конкретный день. Общие лекции объединяются в одну запись.
+List<CampusLesson> campusLessons(DateTime date, ScheduleIndex index, List<GroupSchedule> schedules, {int? forcedWeek}) {
+  final teaching = _teachingDay(date, index, forcedWeek);
+  if (teaching == null) return [];
+  final (day, week) = teaching;
 
   // (пара, предмет, преподаватель, аудитория) → группы
   final merged = <String, (Lesson, Set<String>)>{};
@@ -164,4 +175,67 @@ List<CampusLesson> lessonsInRoom(String room, List<CampusLesson> lessons) =>
 List<String> freeRooms(int pair, List<CampusLesson> dayLessons, List<String> rooms) {
   final busy = {for (final l in dayLessons) if (l.pair == pair && l.room != null) l.room!};
   return [for (final r in rooms) if (!busy.contains(r)) r];
+}
+
+// ---------- группы ----------
+
+/// Двойники русских букв, которые легко набрать латиницей («bи-25», «Bи25»).
+const _latinTwins = {
+  'a': 'а', 'b': 'в', 'c': 'с', 'e': 'е', 'h': 'н', 'k': 'к', 'm': 'м', 'o': 'о', 'p': 'р', 't': 'т', 'x': 'х', 'y': 'у',
+};
+
+/// Название группы для сравнения: без регистра, пробелов, дефисов и точек; «ё» как «е», латинские двойники как русские.
+String groupKey(String name) {
+  final out = StringBuffer();
+  for (final ch in name.toLowerCase().split('')) {
+    if (RegExp(r'[\s\-–—.,_]').hasMatch(ch)) continue;
+    out.write(_latinTwins[ch] ?? (ch == 'ё' ? 'е' : ch));
+  }
+  return out.toString();
+}
+
+/// Подходит ли [title] («1 БИ-25») под запрос: «би25», «1 би 25», «БИ-2» найдут группу.
+bool groupMatches(String title, String query) {
+  final q = groupKey(query);
+  return q.isNotEmpty && groupKey(title).contains(q);
+}
+
+/// Занятия одной группы в день [date] по официальному расписанию (без личных правок и правок старосты).
+/// [subgroup] — только эта подгруппа; null — обе, с пометкой «п/г N» там, где занятие не у всей группы.
+List<CampusLesson> groupLessons(
+  DateTime date,
+  ScheduleIndex index,
+  GroupSchedule schedule, {
+  int? subgroup,
+  int? forcedWeek,
+}) {
+  final teaching = _teachingDay(date, index, forcedWeek);
+  if (teaching == null) return [];
+  final (day, week) = teaching;
+  final subgroupCount = schedule.subgroups.length;
+
+  final result = <CampusLesson>[];
+  for (final lesson in schedule.lessons) {
+    if (lesson.weekday != day.weekday) continue;
+    if (lesson.week != 0 && lesson.week != week) continue;
+    if (subgroup != null && !lesson.subgroups.contains(subgroup)) continue;
+    final notes = <String>[
+      if (subgroup == null && subgroupCount > 1 && lesson.subgroups.length < subgroupCount)
+        'п/г ${lesson.subgroups.join(', ')}',
+      if (lesson.tags.contains('male')) 'юноши',
+      if (lesson.tags.contains('female')) 'девушки',
+      if (lesson.withGroups.isNotEmpty) 'вместе с ${lesson.withGroups.join(', ')}',
+    ];
+    result.add(CampusLesson(
+      pair: lesson.pair,
+      subject: lesson.subject,
+      teacher: lesson.teacher,
+      room: lesson.room,
+      kind: lesson.kind,
+      groups: [schedule.title],
+      note: notes.isEmpty ? null : notes.join(' · '),
+    ));
+  }
+  result.sort((a, b) => a.pair != b.pair ? a.pair.compareTo(b.pair) : a.subject.compareTo(b.subject));
+  return result;
 }

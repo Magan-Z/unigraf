@@ -108,4 +108,92 @@ void main() {
       expect(free.toSet().union(busy.intersection(rooms.toSet())), rooms.toSet());
     });
   });
+
+  group('Группы', () {
+    final bi25 = schedules.firstWhere((s) => s.title == '1 БИ-25');
+    final monday = DateTime.utc(2026, 10, 5); // 2 неделя
+
+    test('название находится при любом написании', () {
+      for (final q in ['би25', '1 би 25', '1 БИ-25', 'Би-25', ' 1би-25 ']) {
+        expect(groupMatches('1 БИ-25', q), isTrue, reason: q);
+      }
+      expect(groupMatches('1 ИТиСС-25', 'итиcc25'), isTrue); // «c» латинская
+      expect(groupMatches('ОЗ-1 ИТиСС-26', 'оз1'), isTrue);
+      expect(groupMatches('1 БИ-25', 'пи25'), isFalse);
+      expect(groupMatches('1 БИ-25', ''), isFalse);
+      expect(groupMatches('1 БИ-25', ' - '), isFalse);
+    });
+
+    test('по запросу «би25» находятся обе группы БИ-25', () {
+      final titles = [for (final f in index.forms) for (final g in f.groups) g.title];
+      expect(titles.where((t) => groupMatches(t, 'би25')), containsAll(['1 БИ-25', '2 БИ-25']));
+    });
+
+    test('все названия групп разные', () {
+      final titles = [for (final f in index.forms) for (final g in f.groups) g.title];
+      expect(titles.toSet(), hasLength(titles.length));
+    });
+
+    test('общая лекция помечена «вместе с …»', () {
+      final lesson = bi25.lessons.firstWhere((l) => l.weekday == 3 && l.pair == 3);
+      final joint = GroupSchedule(
+        version: bi25.version,
+        groupId: bi25.groupId,
+        title: bi25.title,
+        form: bi25.form,
+        subgroups: bi25.subgroups,
+        lessons: [
+          Lesson(
+            weekday: lesson.weekday, pair: lesson.pair, week: lesson.week, subgroups: lesson.subgroups, kind: lesson.kind,
+            subject: lesson.subject, teacher: lesson.teacher, room: lesson.room, tags: lesson.tags, raw: lesson.raw,
+            withGroups: const ['2 БИ-25'],
+          ),
+        ],
+      );
+      expect(groupLessons(wednesday, index, joint).single.note, 'вместе с 2 БИ-25');
+    });
+
+    test('среда 7 октября: лекция, практика 2 недели есть, кураторский час 1 недели нет', () {
+      final day = groupLessons(wednesday, index, bi25);
+      final lecture = day.singleWhere((l) => l.subject == 'Технологическое предпринимательство');
+      expect(lecture.pair, 3);
+      expect(lecture.room, '2-05');
+      expect(day.map((l) => l.subject), contains('ЧТК и этика'));
+      expect(day.map((l) => l.subject), isNot(contains('Кураторский час')));
+      expect(day.map((l) => l.pair), orderedEquals([...day.map((l) => l.pair)]..sort()));
+    });
+
+    test('обе подгруппы: пары одной подгруппы помечены «п/г N»', () {
+      final both = groupLessons(monday, index, bi25);
+      expect(both, hasLength(6));
+      final english = both.where((l) => l.subject == 'Иностранный язык').toList();
+      expect(english.map((l) => l.note), unorderedEquals(['п/г 1', 'п/г 2']));
+      final shared = both.firstWhere((l) => l.subject == 'Философия');
+      expect(shared.note, isNull); // у всей группы пометки нет
+    });
+
+    test('одна подгруппа: чужих пар нет и пометок «п/г» нет', () {
+      final first = groupLessons(monday, index, bi25, subgroup: 1);
+      final second = groupLessons(monday, index, bi25, subgroup: 2);
+      expect(first.any((l) => l.note?.contains('п/г') ?? false), isFalse);
+      expect([for (final l in first) (l.pair, l.subject)], [
+        (1, 'Философия'), (2, 'Философия'), (3, 'Иностранный язык'), (4, 'Технологии бизнес-коммуникаций'),
+      ]);
+      expect([for (final l in second) (l.pair, l.subject)], [
+        (1, 'Философия'), (2, 'Философия'), (3, 'Технологии бизнес-коммуникаций'), (4, 'Иностранный язык'),
+      ]);
+    });
+
+    test('воскресенье и вне семестра — пусто', () {
+      expect(groupLessons(DateTime.utc(2026, 10, 11), index, bi25), isEmpty);
+      expect(groupLessons(DateTime.utc(2027, 1, 15), index, bi25), isEmpty);
+    });
+
+    test('физ-ра: у групп с делением на юношей и девушек пары помечены', () {
+      final friday = groupLessons(DateTime.utc(2026, 10, 9), index, bi25);
+      final pe = friday.where((l) => l.subject.startsWith('Физическая культура'));
+      expect(pe, isNotEmpty);
+      expect(pe.every((l) => l.note?.contains('девушки') ?? false), isTrue);
+    });
+  });
 }

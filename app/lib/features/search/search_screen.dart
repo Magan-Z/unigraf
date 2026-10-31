@@ -1,5 +1,5 @@
-// Экран «Поиск»: преподаватель (где сейчас и расписание), аудитория (кто занимается),
-// свободные аудитории на выбранную пару.
+// Экран «Поиск»: преподаватель (где сейчас и расписание), аудитория (пары в ней и свободные аудитории на выбранную пару),
+// группа (расписание любой группы на выбранный день).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,7 +17,10 @@ import '../common/lesson_widgets.dart';
 import '../common/reveal.dart';
 import '../common/sliding_segments.dart';
 
-enum _Mode { teacher, room, free }
+enum _Mode { teacher, room, group }
+
+/// Внутри «Аудитории»: пары в одной аудитории или список свободных.
+enum _RoomMode { lessons, free }
 
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
@@ -30,6 +33,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   _Mode _mode = _Mode.teacher;
   String? _teacher;
   String? _room;
+  _RoomMode _roomMode = _RoomMode.lessons;
+  String? _groupId; // группа, чьё расписание показано
+  int? _subgroup; // null — обе подгруппы
+  int _groupField = 0; // растёт, когда группа выбрана кнопкой: поле ввода создаётся заново с её названием
   int _dayOffset = 0; // 0 — сегодня, 1 — завтра …
   int _pair = 1;
 
@@ -72,12 +79,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               segments: const [
                 Segment(_Mode.teacher, 'Преподаватель'),
                 Segment(_Mode.room, 'Аудитория'),
-                Segment(_Mode.free, 'Свободные'),
+                Segment(_Mode.group, 'Группа'),
               ],
               selected: _mode,
               onChanged: (m) => setState(() => _mode = m),
             ),
             const SizedBox(height: 12),
+            if (_mode == _Mode.room) ...[
+              SlidingSegments<_RoomMode>(
+                segments: const [
+                  Segment(_RoomMode.lessons, 'Пары в аудитории'),
+                  Segment(_RoomMode.free, 'Свободные'),
+                ],
+                selected: _roomMode,
+                onChanged: (m) => setState(() => _roomMode = m),
+              ),
+              const SizedBox(height: 12),
+            ],
             _DayChips(
               today: today,
               selected: _dayOffset,
@@ -86,7 +104,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             const SizedBox(height: 12),
             // Ключ по режиму: при переключении содержимое появляется заново (волной), а не «щёлкает» на месте
             KeyedSubtree(
-              key: ValueKey(_mode),
+              key: ValueKey('$_mode-$_roomMode'),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: switch (_mode) {
@@ -96,8 +114,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     dayLessons,
                     day,
                   ),
-                  _Mode.room => _roomView(schedules, index, dayLessons, day),
-                  _Mode.free => _freeView(schedules, index, dayLessons),
+                  _Mode.room => _roomMode == _RoomMode.lessons
+                      ? _roomView(schedules, index, dayLessons)
+                      : _freeView(schedules, index, dayLessons),
+                  _Mode.group => _groupView(schedules, index, day),
                 },
               ),
             ),
@@ -129,6 +149,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         child: _Autocomplete(
           key: const ValueKey('teacher'),
           label: 'Фамилия или имя',
+          initialText: teacher,
           options: names,
           onSelected: (v) => setState(() => _teacher = v),
         ),
@@ -191,7 +212,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     List<GroupSchedule> schedules,
     ScheduleIndex index,
     List<CampusLesson> dayLessons,
-    DateTime day,
   ) {
     final room = _room;
     return [
@@ -199,7 +219,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         index: 0,
         child: _Autocomplete(
           key: const ValueKey('room'),
-          label: 'Аудитория, например 2-05',
+          label: 'Номер аудитории, например 2-05',
+          initialText: room,
           options: allRooms(schedules),
           onSelected: (v) => setState(() => _room = v),
         ),
@@ -210,9 +231,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           index: 1,
           child: _SearchHint(
             illustration: IllustrationKind.searchRoom,
-            title: 'Найдите аудиторию',
+            title: 'Пары в аудитории',
             text:
-                'Введите номер, например 2-05: покажем, кто в ней занимается.',
+                'Введите номер, например 2-05: покажем, какие пары в ней проходят. Нужна свободная аудитория — выберите «Свободные».',
           ),
         )
       else
@@ -223,6 +244,129 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           emptyText: 'В этот день аудитория свободна',
           replayKey: '$room-$_dayOffset',
         ),
+    ];
+  }
+
+  // ---------- группа ----------
+
+  List<Widget> _groupView(List<GroupSchedule> schedules, ScheduleIndex index, DateTime day) {
+    final infos = [for (final f in index.forms) ...f.groups];
+    final schedule = _groupId == null ? null : schedules.where((s) => s.groupId == _groupId).firstOrNull;
+    final theme = Theme.of(context);
+
+    void pick(String title) {
+      final found = schedules.where((s) => s.title == title).firstOrNull;
+      if (found == null) return;
+      setState(() {
+        _groupId = found.groupId;
+        _subgroup = null;
+      });
+    }
+
+    return [
+      Reveal(
+        index: 0,
+        child: _Autocomplete(
+          key: ValueKey('group-$_groupField'),
+          label: 'Группа, например 1 БИ-25',
+          initialText: schedule?.title,
+          options: [for (final g in infos) g.title],
+          matches: groupMatches,
+          maxOptions: 10,
+          onSelected: pick,
+        ),
+      ),
+      const SizedBox(height: 12),
+      if (schedule == null) ...[
+        Reveal(
+          index: 1,
+          child: Text(
+            'Введите название группы или выберите её ниже: покажем расписание на выбранный день.',
+            style: theme.textTheme.bodyMedium,
+          ),
+        ),
+        for (final form in index.forms) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 20, bottom: 4),
+            child: Text(form.title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+          ),
+          for (final course in ({for (final g in form.groups) g.course}.toList()..sort()))
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 64,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text('$course курс', style: theme.textTheme.bodySmall),
+                    ),
+                  ),
+                  Expanded(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        for (final g in form.groups.where((g) => g.course == course))
+                          ActionChip(
+                            label: Text(g.title),
+                            onPressed: () {
+                              pick(g.title);
+                              setState(() => _groupField++);
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ] else ...[
+        if (schedule.subgroups.length > 1) ...[
+          Reveal(
+            index: 1,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final (n, label) in [(null, 'Обе подгруппы'), for (final s in schedule.subgroups) (s.n, s.label)])
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        showCheckmark: false,
+                        label: Text(label),
+                        selected: _subgroup == n,
+                        onSelected: (_) => setState(() => _subgroup = n),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        _LessonList(
+          lessons: groupLessons(
+            day,
+            index,
+            schedule,
+            subgroup: _subgroup,
+            forcedWeek: ref.watch(settingsProvider).forcedWeek,
+          ),
+          index: index,
+          directory: index.teachers,
+          emptyText: 'В этот день занятий нет',
+          replayKey: '${schedule.groupId}-$_dayOffset-$_subgroup',
+          showGroups: false,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Официальное расписание группы, без правок старосты и личных правок.',
+          style: theme.textTheme.bodySmall,
+        ),
+      ],
     ];
   }
 
@@ -426,10 +570,20 @@ class _Autocomplete extends StatelessWidget {
     required this.label,
     required this.options,
     required this.onSelected,
+    this.initialText,
+    this.matches,
+    this.maxOptions = 8,
   });
   final String label;
   final List<String> options;
   final ValueChanged<String> onSelected;
+
+  /// Текст в поле при создании (выбранное раньше значение: поле пересоздаётся при смене режима).
+  final String? initialText;
+
+  /// Как отбирать подсказки; по умолчанию — запрос внутри названия без учёта регистра.
+  final bool Function(String option, String query)? matches;
+  final int maxOptions;
 
   @override
   Widget build(BuildContext context) {
@@ -437,10 +591,12 @@ class _Autocomplete extends StatelessWidget {
     final scheme = theme.colorScheme;
     return LayoutBuilder(
       builder: (context, constraints) => Autocomplete<String>(
+        initialValue: initialText == null ? null : TextEditingValue(text: initialText!),
         optionsBuilder: (value) {
           final q = value.text.trim().toLowerCase();
           if (q.isEmpty) return const Iterable<String>.empty();
-          return options.where((o) => o.toLowerCase().contains(q)).take(8);
+          final test = matches ?? (String o, String query) => o.toLowerCase().contains(query);
+          return options.where((o) => test(o, q)).take(maxOptions);
         },
         onSelected: onSelected,
         // Список подсказок: скруглённая карточка под полем той же ширины (а не квадрат на весь экран)
@@ -504,7 +660,11 @@ class _LessonList extends StatelessWidget {
     required this.directory,
     required this.emptyText,
     required this.replayKey,
+    this.showGroups = true,
   });
+
+  /// В подвале карточки: список групп (поиск по институту) или только пометка занятия (расписание одной группы).
+  final bool showGroups;
   final List<CampusLesson> lessons;
   final ScheduleIndex index;
   final List<String> directory; // полные ФИО преподавателей
@@ -540,7 +700,7 @@ class _LessonList extends StatelessWidget {
         for (final (i, l) in lessons.indexed)
           Reveal(
             key: ValueKey(
-              '$replayKey-${l.pair}-${l.subject}-${l.groups.join(',')}',
+              '$replayKey-${l.pair}-${l.subject}-${l.teacher}-${l.room}-${l.note}-${l.groups.join(',')}',
             ),
             index: i + 2,
             child: Padding(
@@ -554,7 +714,7 @@ class _LessonList extends StatelessWidget {
                     ? null
                     : teacherFullName(l.teacher!, directory),
                 room: l.room,
-                footer: l.groups.join(', '),
+                footer: showGroups ? l.groups.join(', ') : l.note,
               ),
             ),
           ),
