@@ -207,8 +207,15 @@ object WidgetRenderer {
         views.setTextViewText(R.id.label, if (state.isCurrent) "Идёт сейчас" else "Дальше")
         paintStatusLabel(views, R.id.label, state.isCurrent, colors)
         views.setTextViewText(R.id.subject, lesson.short)
-        views.setTextViewText(R.id.room, lesson.room ?: "—")
+        // Обычный номер («2-05») — крупно; длинное место («3 корпус») — та же табличка, но мелким шрифтом в две строки
+        val roomText = lesson.room ?: "—"
+        val long = roomText.length > 6
+        views.setViewVisibility(R.id.room, if (long) View.GONE else View.VISIBLE)
+        views.setViewVisibility(R.id.room_long, if (long) View.VISIBLE else View.GONE)
+        views.setTextViewText(R.id.room, roomText)
+        views.setTextViewText(R.id.room_long, roomText)
         paintPlate(views, R.id.room, toneOf(context, lesson.tone), colors)
+        paintPlate(views, R.id.room_long, toneOf(context, lesson.tone), colors)
         views.setTextViewText(R.id.badge, lesson.kindLetter)
         views.setViewVisibility(R.id.badge, if (lesson.kindLetter.isEmpty()) View.INVISIBLE else View.VISIBLE)
 
