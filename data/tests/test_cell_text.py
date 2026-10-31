@@ -67,3 +67,12 @@ def test_teacher_typo_fix_from_config() -> None:
     # другой преподаватель не затрагивается
     assert parse("Правоведение Азиева П.З. 3-08", fixes).teacher == "Азиева П.З."
 
+
+
+def test_teacher_typo_fixes_from_config() -> None:
+    import json
+    from pathlib import Path
+
+    fixes = json.loads((Path(__file__).parent.parent / "config.json").read_text(encoding="utf-8"))["subjectFixes"]
+    assert parse("Биометрия Иноркаев В.А-Р. 2-05", fixes).teacher == "Инаркаев В.А-Р."
+    assert parse("Информатика Абубакаров М. С-С. 3-12", fixes).teacher == "Абубакаров М.С-С."
